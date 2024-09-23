@@ -1,0 +1,731 @@
+---
+title: |
+  <center> Epic-Bio Bulk DNA Methylation Downstream Analysis EPI321 vs Untreated, min=2L (Merged Samples) </center>
+subtitle: "Sabra Djomehri & Emily Dabe, Excelra"
+params:
+  eval_chunk: TRUE
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    self_contained: yes
+    template: "/home/rstudio/00_code/opp_markdown_reports/op2_template/report.html"
+template_dir: "/home/rstudio/00_code/opp_markdown_reports/op2_template"
+
+---
+
+```{r setup, include=FALSE} 
+#(`r format(Sys.time(), '%Y.%m.%d')`
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,cache=FALSE)
+# load packages for DMR analysis 
+library(DT)
+library(methylKit) # success, quick install
+# Annotation package
+library(genomation)
+library(GenomicRanges)
+library(plotly)
+library(ggplot2)
+##Note further libraries are imported further down for Human gene annotation and they are not invoked immediately because some function names overlap and its easier to not load them in immediately. 
+##Also note that the template for the Rmarkdown can be removed from the html_document settings if not desired during knitting
+
+```
+
+## QC Analysis
+** First, we read in the bismark methylation coverage files and store them as a flat file datatbase.  internally stored as data.frame, is stored in an external bgzipped file and is indexed by tabix (Li 2011), to enable fast retrieval of records or regions. We can now create a methylRawListDB object, which stores the same content as myobj from above. But the single methylRaw objects retrieve their data from the tabix-file linked under dbpath.
+** Next we perform descriptive statistics on all samples: check basic stats about methylation data (e.g. coverage and percent methylation), plots of the percent methylation distribution and the read coverage per base.
+```{r}
+#setting analysis variables 
+base_folder="/home/rstudio/01_input/"
+comparison_folder="EPI.vs.Cntrl/coverage"
+filename_string="methyl.part4.merged.EPIvCtrl"
+## DEGfiles only needed if comparative RNA vs DNA methylation plots will be made at the end of Rmd currently commented out
+DEGfile.lfc="/home/rstudio/00_code/Dec2023_part4_RNA_degs_all_lfc2.tsv"
+DEGfile="/home/rstudio/00_code/Dec2023_part4_RNA_degs_all_noCutoff.tsv"
+project="merged EPI321 vs Control"
+#sample ids must be in alpha numeric order 
+sample.ids=c("c1","c2","c4","c5","c7","c8")
+#treaatment vector control is "0" treated is "1" for comparison
+treatment.vector=c(0,1,0,1,0,1)
+# these two variables used to be used later on in the code leaving in case removing breaks something 
+treated= c("c2", "c5", "c8") #epi321
+control=c("c1", "c4", "c7") #untreated
+
+# Read in bismark coverage files (unzipped) to generate "myobj" file will only work if a file with filename_string with an rds extension doesn't already exist. 
+if (file.exists(paste0(base_folder,comparison_folder,filename_string,".rds"))) {
+  myobj <- readRDS(file = paste0(base_folder,comparison_folder,filename_string,".rds"))
+} else {
+  files <- list.files(paste0(base_folder,comparison_folder), pattern = ".cov", full.names = T)
+  file.list <- as.list(files)
+  # read methylation call files and store them as flat file database
+  myobj=methRead(file.list,
+                 sample.id=list("c1","c2","c4","c5","c7","c8"),
+                 assembly="GRCh38",
+                 pipeline="bismarkCoverage",
+                 treatment=treatment.vector,
+                 context="CpG",
+                 dbtype = "tabix",
+                 dbdir = "methylDB",
+                 header =F
+  ) 
+  saveRDS(myobj, file = paste0(base_folder,comparison_folder,filename_string,".rds"))
+}
+# Descriptive statistics on samples
+getMethylationStats(myobj[[1]],plot=TRUE,both.strands=FALSE) # check methylation stats on first sample
+getCoverageStats(myobj[[1]],plot=TRUE,both.strands=FALSE) # check coverage stats on first  sample 
+## both hashed out because took too much processing time but can be unhashed if desired 
+#lapply(myobj, function(x) getMethylationStats(x,plot=T,both.strands=FALSE)) # check methylation stats on all samples w/ plot
+#lapply(myobj, function(x) getCoverageStats(x,plot=T,both.strands=FALSE)) # check coverage stats on all samples
+
+```
+
+##  Comparative Analysis
+** Merged all samples to one object for base-pair locations covered in all samples.
+
+```{r}
+## Comparative analysis
+##  Merging all samples into one file. This is needed as precursor for dmc analyses  
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,"meth.rds"))){
+  meth=methylKit::unite(myobj, destrand=FALSE)
+  #meth.min=unite(myobj,min.per.group=1L)
+  saveRDS(meth, file = paste0(base_folder,comparison_folder,filename_string,"meth.rds"))
+}else{
+  meth <- readRDS(file = paste0(base_folder,comparison_folder,filename_string,"meth.rds"))
+}
+
+# Sample Correlation PCA plots based on individual CpG sites. Hash out this section to save time. 
+#getCorrelation(meth,plot=TRUE) <- takes FOREVER to compute also had to readjust figure margins to par(mar(1,1,1,1)) to avoid the error. 
+clusterSamples(meth, dist="correlation", method="ward.D2", plot=TRUE)
+hc = clusterSamples(meth, dist="correlation", method="ward", plot=FALSE)
+PCASamples(meth, screeplot=TRUE)
+PCASamples(meth, adj.lim=c(0.5,0.5))
+
+```
+
+
+## Tiling windows analysis
+** For some situations, it might be desirable to summarize methylation information over tiling windows rather than doing base-pair resolution analysis. For example, here we tile the genome with windows of 100bp and step-size 100bp and summarize the methylation information on those tiles. This returns a methylRawList object which can be fed into unite and calculateDiffMeth functions consecutively to get differentially methylated regions. The tilling function adds up C and T counts from each covered cytosine and returns a total C and T count for each tile.
+
+```{r}
+#converting my.obj to tile object for sliding 100 bp windows minimum coverage 5 
+if(!file.exists(paste0(base_folder,comparison_folder,"tile.",filename_string,"meth.rds"))) {
+  tile.obj=tileMethylCounts(myobj,win.size=100,step.size=100,cov.bases=5)
+  saveRDS(tile.obj, file = paste0(base_folder,comparison_folder,"tile.",filename_string,"meth.rds"))
+}else{
+  tile.obj <- readRDS(file = paste0(base_folder,comparison_folder,"tile.",filename_string,"meth.rds"))
+  
+}
+## in this version of the code we only required 2 out of the 3 total merged samples (one sample per patient source) to contain a methylation site for it to be included in the comparative analyses if min.per.group is not specified default is all samples must have a specific CpG site or meth tile covered to include it. 
+if(!file.exists(paste0(base_folder,comparison_folder,"meth.tile.",filename_string,".min2.meth.rds"))){
+  meth.tile=methylKit::unite(tile.obj, destrand=FALSE, min.per.group = 2L) 
+  saveRDS(meth.tile, file = paste0(base_folder,comparison_folder,"meth.tile.",filename_string,".min2.meth.rds"))
+}else{
+    meth.tile <-readRDS(file = paste0(base_folder,comparison_folder,"meth.tile.",filename_string,".min2.meth.rds"))
+}
+ PCASamples(meth.tile)
+# find DMRs 
+ if(!file.exists(paste0(base_folder,comparison_folder,"myDiffmeth.tile.",filename_string,".min2.meth.rds"))){
+   myDiff.tile=calculateDiffMeth(meth.tile)
+   saveRDS(myDiff.tile,file=paste0(base_folder,comparison_folder,"myDiffmeth.tile.",filename_string,".min2.meth.rds"))
+ }else{
+   myDiff.tile <- readRDS(paste0(base_folder,comparison_folder,"myDiffmeth.tile.",filename_string,".min2.meth.rds"))
+ }
+
+```
+## DMR no cut-off Tiling hyper/hypo methylated regions per chromosome
+```{r}
+diffMethPerChr(myDiff.tile,plot=TRUE,qvalue.cutoff=1, meth.cutoff=25)
+
+
+```
+
+## Differentially methylated bases or regions
+** The calculateDiffMeth() function is the main function to calculate differential methylation. Depending on the sample size per each set it will either use Fisher’s exact or logistic regression to calculate P-values. P-values will be adjusted to Q-values using SLIM method (Wang, Tuominen, and Tsai 2011). Note: if we have replicates, the function will automatically use logistic regression. You can force the calculateDiffMeth() function to use Fisher’s exact test if you pool the replicates when there is only test and control sample groups.
+** We can also visualize the distribution of hypo/hyper-methylated bases/regions per chromosome 
+
+```{r}
+
+## Finding differentially methylated CpGs (differentially methylated regions is in the previous section)
+ if(!file.exists(paste0(base_folder,comparison_folder,"myDiff.",filename_string,".min2.meth.rds"))){
+   myDiff=calculateDiffMeth(meth)
+   saveRDS(myDiff,file = paste0(base_folder,comparison_folder,"myDiff.",filename_string,".min2.meth.rds"))
+ }else {
+   myDiff <- readRDS(file = paste0(base_folder,comparison_folder,"myDiff.",filename_string,".min2.meth.rds"))
+ }
+
+
+```
+
+## Find all differentially methylated bases or regions
+** After q-value calculation, we can select the differentially methylated regions/bases based on q-value and percent methylation difference cutoffs. Here we compute all DMRs in treatment and control samples with and without standard cutoffs. 
+```{r}
+library(dplyr)
+library(genomation)
+## creating and saving an additional filtered dmc file with a minimum of 5% difference in methylation and a significant qvalue 
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,"myDiff5p.min2.cpg.rds"))){
+  myDiff5p=getMethylDiff(myDiff,difference=5,qvalue=0.01)
+  saveRDS(myDiff5p,paste0(base_folder,comparison_folder,filename_string,"myDiff5p.min2.cpg.rds"))}else{
+    myDiff5p <- readRDS(paste0(base_folder,comparison_folder,filename_string,"myDiff5p.min2.cpg.rds"))
+  }
+
+```
+## Annotating differentially methylated regions (DMRs)
+** In this section we will annotate differentially methylated regions with promoter/exon/intron using annotation data: 
+** Files tested: fantom5_hg38_cage_peaks.txt, hg38_fair+new_CAGE_peaks_phase1and2.bed, hg38_liftover+new_CAGE_peaks_phase1and2_ann.txt
+** get a bed file from hg38 regions (hg38_RefSeq.bed) and flank 1000bp up and 300bp down
+** Next, summarize methylation information over a set of defined regions such as promoters. Regions of interest given as a GRanges object.
+** From tiling at window=100bp, total DMRs found were 123,229, total promoters are 47,019, after gene annotations (46,515 obs)
+
+```{r}
+##hashed out because it only needs to be run once to generate proximal promoter regions 
+# Load in human hg38 gtf/bed file 
+# here you can manipulate the GRanges object, e.g.:
+# if(!file.exists())
+# gene.obj=readTranscriptFeatures('hg38_RefSeq.bed', up.flank = 1000, down.flank = 300, unique.prom = TRUE)
+# saveRDS(gene.obj, file = "gene.obj.rds")
+gene.obj <- readRDS(file = "/home/rstudio/00_code/gene.obj.rds")
+## hashed out because it only needs to be run once 
+#cpg.obj.ext=readFeatureFlank(system.file("extdata", "cpgi.hg18.bed.txt", 
+#                                        package = "methylKit"),
+#                           feature.flank.name=c("CpGi","shores"))
+# read the shores and flanking regions and name the flanks as shores and CpG islands as CpGi
+#custom.obj=readFeatureFlank("cpgi.hg18.bed.txt", feature.flank.name=c("enhancer","shores"))
+custom.obj=readFeatureFlank("/home/rstudio/00_code/fantom5_hg38.txt", feature.flank.name=c("enhancers","shores"))
+
+# convert methylDiff object to GRanges and annotate
+
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,".diffAnn.custom.min2.rds"))){
+      diff_customAnn=annotateWithFeatureFlank(as(myDiff.tile,"GRanges"),
+                                     custom.obj$enhancers,custom.obj$shores,
+                          feature.name="enhancers",flank.name="shores")
+      saveRDS(diff_customAnn, paste0(base_folder,comparison_folder,filename_string,".diffAnn.custom.min2.rds"))
+      } else { 
+        # save this for large files
+        diff_customAnn=readRDS(paste0(base_folder,comparison_folder,filename_string,".diffAnn.custom.min2.rds"))
+      } 
+# Regional analysis
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,".promoters.rds"))){
+      promoters=regionCounts(tile.obj,gene.obj$promoters)
+      saveRDS(promoters, paste0(base_folder,comparison_folder,filename_string,".promoters.rds"))
+      } else { 
+        # select for promoters <- that is sabra's note. this section is subsetting the methylation object down to just the promoter regions
+        promoters=readRDS(paste0(base_folder,comparison_folder,filename_string,".promoters.rds"))
+      } 
+## if want to check that there's promoters 
+#head(promoters[[1]])
+promoters.obj <- gene.obj$promoters # check we have promoters
+
+myPromoters=tileMethylCounts(promoters,win.size=100,step.size=100)
+prom <- methylKit::unite(myPromoters,min.per.group=2L) #Emily note: this is tiled DMRs for promoters?
+
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,".myProm.calcdiffMeth.min2.rds"))){
+      myProm=calculateDiffMeth(prom)
+      saveRDS(myProm, paste0(base_folder,comparison_folder,filename_string,".myProm.calcdiffMeth.min2.rds"))
+      } else { 
+        # save this for large files
+        myProm=readRDS(paste0(base_folder,comparison_folder,filename_string,".myProm.calcdiffMeth.min2.rds"))
+      } 
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,".promgetmethdiff.min2.rds"))){
+     myPromotersdiffmeth=getMethylDiff(myProm,difference=1,qvalue=1) 
+      saveRDS(myPromotersdiffmeth, paste0(base_folder,comparison_folder,filename_string,".promgetmethdiff.min2.rds"))
+      } else { 
+        # save this for large files
+        myPromotersdiffmeth=readRDS(paste0(base_folder,comparison_folder,filename_string,".promgetmethdiff.min2.rds"))
+      }
+diffMethPerChr(myPromotersdiffmeth,plot=TRUE,qvalue.cutoff=1, meth.cutoff=10) #works but gave "Warning: NAs introduced by coercion" not sure if that's normal? But it made a plot! 
+
+# Convenience functions for annotation objects
+
+#annotateWithGeneParts(as(myDiff5p,"GRanges"),gene.obj) <- hashed out by Sabra
+#cage.annot = annotateWithGeneParts(myDiff10p, gene.obj, intersect.chr=TRUE) <- hashed out by Sabra
+###only difference between this and the commands below are that the naming convention was changed to include the phrase "min2" this could have been more easily implemented with the filename_string at the beginning. 
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,".diffAnn.tile.min2.rds"))){
+      diffAnn.tile=annotateWithGeneParts(as(myDiff.tile,"GRanges"),gene.obj,intersect.chr=TRUE)
+      saveRDS(diffAnn.tile, paste0(base_folder,comparison_folder,filename_string,".diffAnn.tile.min2.rds"))
+      } else { 
+        # save this for large files
+        diffAnn.tile=readRDS(paste0(base_folder,comparison_folder,filename_string,".diffAnn.tile.min2.rds"))
+      } 
+
+# if(!file.exists(paste0(base_folder,comparison_folder,filename_string,".diffAnn.rds"))){
+#       diffAnn=annotateWithGeneParts(as(myDiff,"GRanges"),gene.obj,intersect.chr=TRUE)
+#       saveRDS(diffAnn, paste0(base_folder,comparison_folder,filename_string,".diffAnn.rds"))
+#       } else { 
+#         # save this for large files
+#         diffAnn=readRDS(paste0(base_folder,comparison_folder,filename_string,".diffAnn.rds"))
+#       } 
+
+
+```
+
+## Global Methylation Statistics tables 
+In this first set of statistics tables DMRs and DMCs per region are tabulated with "getTargetAnnotationStats" . No filter for qvalue (FDR statistic) or percent methylation cut-off of is applies but precedence is added. Precedence means no methylation will be counted twice even if it overlaps with two different exons or two features. The priority for precedence calling is: 
+   promoter>exon>intron .
+So this means that if a methylated site or tile overlaps with a promoter it will be counted as promoter overlapping only, or if it is overlapping with a an exon but not a promoter, #' it will be counted as exon overlapping only whether or not it overlaps with an intron.
+
+
+```{r}
+# Percentage/number of differentially methylated regions that overlap with intron/exon/promoters
+df1 <-as.data.frame(getTargetAnnotationStats(diffAnn.tile,percentage=FALSE,precedence=TRUE))
+colnames(df1) <- ""
+datatable(df1,options(list( dom = 't',            # Specify the location of the table tools
+    searching = FALSE,     # Disable search box
+    info = FALSE,          # Disable table information summary
+    title="Number of DMR methylation tiles (100 bps)")),caption="Number of DMR methylation tiles (100 bps)")
+df2 <- as.data.frame(getTargetAnnotationStats(diffAnn.tile,percentage=TRUE,precedence=TRUE))
+colnames(df2) <- ""
+datatable(df2,options(list(dom = 't', # Specify the location of the table tools
+    searching = FALSE,     # Disable search box
+    info = FALSE,          # Disable table information summary
+    title="Percentage of DMR methylation tiles (100 bps) with precedence")),caption="Percentage of DMR methylation tiles (100 bps) with precedence")
+df5 <- as.data.frame(getTargetAnnotationStats(diff_customAnn,percentage=FALSE,precedence=TRUE))
+colnames(df5) <- ""
+datatable(df5,options(list(title="Number of DMC methylation sites with precedence in custom enhancer regions")),caption="Number of DMC methylation sites with precedence in custom enhancer regions")
+df6 <- as.data.frame(getTargetAnnotationStats(diff_customAnn,percentage=TRUE,precedence=TRUE))
+colnames(df6) <- ""
+datatable(df6,options(list(title="Percentage of DMC methylation sites with precedence in custom enhancer regions")),caption="Percentage of DMC methylation sites with precedence in custom enhancer regions")
+# Percentage of differentially methylated bases overlapping with exon/intron/promoters
+#getFeatsWithTargetsStats(diffAnn,percentage=TRUE) #hashed out by Sabra. For CpG sites This function retrieves percentage/number of annotation features overlapping with targets. For example, if AnnotationByFeature object is containing statistics of differentially methylated regions overlapping with gene annotation. This function will return number/percentage of introns,exons and promoters overlapping with differentially methylated regions. Essentially is the inverse of the plot that is not hashed out below
+plotTargetAnnotation(diffAnn.tile,precedence=TRUE,
+    main="differential methylation: tiling windows=100bp")
+#getFeatsWithTargetsStats(diffAnn.tile,percentage=TRUE) #same as above but for tiles 
+plotTargetAnnotation(diff_customAnn,col=c("green","gray","white"),
+       main="differential methylation: enhancers")
+```
+
+```{r}
+# Convert methylKit objects to GRanges using GenomicRanges package. Coercing methylKit objects to GRanges will give users additional flexibility when customizing their analyses.
+require(dplyr)
+require(tidyr)
+
+#class(meth)
+#meth.gr <- as(meth,"GRanges")
+#class(myDiff)
+#myDiff.gr <- as(myDiff,"GRanges") #not sure why we're back to myDiff instead of myDiffPromoters? 
+
+
+# Selection: subsetting methylKit Objects to just differentially methylated sites/regions
+##for tiling
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,".min2.select.meth.tile.rds"))){
+	select.meth <- getData(myDiff.tile) #DMRs
+	saveRDS(select.meth, file = paste0(base_folder,comparison_folder,filename_string,".min2.select.meth.tile.rds"))
+	write.csv(select.meth, paste0(base_folder, comparison_folder,filename_string,".min2.select.meth.tile.csv"), sep="\t", col.names=T, row.names=FALSE, append=TRUE, quote=FALSE)
+}else{
+	select.meth <- readRDS(file = paste0(base_folder,comparison_folder,filename_string,".min2.select.meth.tile.rds"))
+}
+## for CpG sites 
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,".select.meth2.rds"))){
+	select.meth2 <- getData(myDiff) #DMCs
+	saveRDS(select.meth2, file = paste0(base_folder,comparison_folder,filename_string,".select.meth2.rds"))
+	write.csv(select.meth2, paste0(base_folder, comparison_folder,filename_string,".min2.select.meth.csv"), sep="\t", col.names=T, row.names=FALSE, append=TRUE, quote=FALSE)
+}else{
+select.meth2 <- readRDS(file = paste0(base_folder,comparison_folder,filename_string,".select.meth2.rds"))
+}
+
+# annotate peaks to gene names
+if (!require(ChIPseeker, quietly = TRUE)){ 
+    options(BioC_mirror = "http://bioconductor.org")
+	BiocManager::install("ChIPseeker")
+	BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")
+	BiocManager::install("EnsDb.Hsapiens.v75")
+}
+library(ChIPseeker)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+library(EnsDb.Hsapiens.v75)
+#library(annotables)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+
+# write bedfile
+meth.bed <- as.data.frame(select.meth) #dmr
+meth.bed2 <- as.data.frame(select.meth2)#dmc
+write.table(meth.bed, paste0(base_folder, comparison_folder, filename_string,".meth.tile.min2.bed"), sep="\t", col.names=FALSE, row.names=FALSE, append=TRUE, quote=FALSE)
+write.table(meth.bed2, paste0(base_folder, comparison_folder, filename_string,".meth.cpg.min2.bed"), sep="\t", col.names=FALSE, row.names=FALSE, append=TRUE, quote=FALSE)
+## for tiling 
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,".meth.anno.min2.rds"))){
+  meth.anno <- annotatePeak( paste0(base_folder, comparison_folder, filename_string,".meth.tile.min2.bed"), tssRegion=c(-1000, 300), TxDb=TxDb.Hsapiens.UCSC.hg38.knownGene, verbose=FALSE)
+  saveRDS(meth.anno, file = paste0(base_folder,comparison_folder,filename_string,".meth.anno.min2.rds"))
+}else{
+  meth.anno <- readRDS(file = paste0(base_folder,comparison_folder,filename_string,".meth.anno.min2.rds"))
+}
+## for cpgs 
+# if(!file.exists(paste0(base_folder,comparison_folder,filename_string,".meth.anno.cpg.rds"))){
+#   meth.anno.cpg <- annotatePeak( paste0(base_folder, comparison_folder, filename_string,".meth.cpg.bed"), tssRegion=c(-1000, 300), TxDb=TxDb.Hsapiens.UCSC.hg38.knownGene, verbose=FALSE)
+#   saveRDS(meth.anno.cpg, file = paste0(base_folder,comparison_folder,filename_string,".meth.anno.cpg.rds"))
+# }else{
+#   meth.anno.cpg <- readRDS(file = paste0(base_folder,comparison_folder,filename_string,".meth.anno.cpg.rds"))
+# }
+
+## hash these plots to speed up run time
+#Plot 
+plotAnnoBar(meth.anno)
+plotAnnoPie(meth.anno)
+plotDistToTSS(meth.anno, title="Distribution of transcription factor-binding loci \n relative to TSS")
+```
+
+
+```{r}
+# Annotations for peak call <- note: changed the variable name to meth_annot_peaks to avoid overwriting variables 
+meth_annot_peaks <- data.frame(meth.anno@anno)
+names(meth_annot_peaks)[1]<-paste("chr")
+meth_annot_peaks <- meth_annot_peaks[order(meth_annot_peaks$chr), ]
+keytypes(TxDb.Hsapiens.UCSC.hg38.knownGene)
+rm(meth.anno)
+#select.meth <- getData(select.meth) #<- hashed out by Sabra, also is done much earlier in this rmd <- new note that one fails too
+meth.annot.merge <- merge(select.meth, meth_annot_peaks, by=c("chr", "end"), all=F) #but this one works once again without getData(select.meth)
+meth.promoters <- meth.annot.merge[meth.annot.merge$annotation=="Promoter",]
+meth.promoters <- unique(meth.promoters) # removing direct duplicates of promoters due to y annotation
+meth.avg <- meth.promoters %>% group_by(geneId, pvalue, qvalue) %>% summarise(avg=mean(meth.diff))
+meth.counts <- meth.promoters %>% group_by(geneId) %>% summarise(n=n()) 
+
+
+
+# write ROI bed file
+#Chr4:190064741-190064840
+# chr4:190059741-190069840
+# chr14:16098801-16108900
+# chr4<-c("chr4", "190059741", "190069840")
+# chr4 <- as.data.frame(t(chr4))
+# names(chr4)[1]<-paste("chr")
+# names(chr4)[2]<-paste("start")
+# names(chr4)[3]<-paste("end")
+# write.table(chr4, "chr4map.bed", sep="\t", col.names=FALSE, row.names=FALSE, append=TRUE, quote=FALSE)
+
+#saveRDS(meth.avg, file = "meth.avg.rds")
+# check methylation vals
+colSums(meth.promoters[c("meth.diff")] < -10)
+gene_names <- AnnotationDbi::select(EnsDb.Hsapiens.v75,
+                                         keys = meth.avg$geneId,
+                                         columns = c("GENENAME"),
+                                         keytype = "ENTREZID")
+# merge the object
+names(gene_names)[1]<-paste("geneId")
+#merge.gene <- readRDS(file = "merge.gene.rds")
+merge.gene <- merge(meth.avg, gene_names, by=c("geneId"), all=F)
+gene_names <- as.data.frame(gene_names)
+names(merge.gene)[4]<-paste("avg.meth.diff")
+names(merge.gene)[5]<-paste("gene")
+
+#saveRDS(merge.gene, file = paste0(base_folder,comparison_folder, filename_string,".merge.gene.rds"))
+#  selectByOverlap: subset by specific GRanges location
+#my.win=GRanges(seqnames=promoters,
+#               ranges=IRanges(start=seq(from=9764513,by=10000,length.out=20),width=5000) )#hashed out by Sabra
+
+# # selects the records that lie inside promoter regions
+# #promoters.myobj <- selectByOverlap(myobj[[1]],promoters.obj) assuming this is an old test command to make sure the following function worked.
+
+if(!file.exists(paste0(base_folder,comparison_folder, filename_string,".promoters.myobj.rds"))){
+promoters.myobj <- lapply(myobj, function(x) selectByOverlap(x,promoters.obj))
+saveRDS(promoters.myobj, file = paste0(base_folder,comparison_folder, filename_string,".promoters.myobj.rds"))}else {
+  promoters.myobj <- readRDS(file = paste0(base_folder,comparison_folder, filename_string,".promoters.myobj.rds"))
+}
+```
+
+## Percent methylation for tiles (all dots not promoter) 
+
+```{r}
+if(!file.exists(paste0(base_folder, comparison_folder, filename_string,"perc.meth.tile.min2.rds"))){
+  perc.meth.tile=percMethylation(meth.tile, rowids = TRUE)
+  perc.meth.tile <- as.data.frame(perc.meth.tile)
+  perc.meth.tile$avg_treat <- rowMeans(perc.meth.tile[, colnames(perc.meth.tile) %in% treated], na.rm = TRUE)
+  perc.meth.tile$avg_ctrl <- rowMeans(perc.meth.tile[, colnames(perc.meth.tile) %in% control], na.rm = TRUE)
+  perc.meth.tile$coord <- rownames(perc.meth.tile)
+  meth.bed$coord <- paste0(meth.bed$chr,".",meth.bed$start,".",meth.bed$end)
+  perc.meth.tile <- merge(perc.meth.tile, meth.bed, by="coord")
+  saveRDS(perc.meth.tile, file = paste0(base_folder, comparison_folder,
+                                        filename_string,"perc.meth.tile.min2.rds"))
+}else{
+  perc.meth.tile <- readRDS(paste0(base_folder, comparison_folder, filename_string,"perc.meth.tile.min2.rds"))
+}
+
+perc.meth.tile <- perc.meth.tile[perc.meth.tile$qvalue <=0.05,]
+#saving a new version with the avg meth added in.
+saveRDS(perc.meth.tile, file = paste0(base_folder, comparison_folder, filename_string,"perc.meth.tile.min2.q0.05.rds"))
+## plotting only tiles with q <-0.05
+perc.meth.tile.plot <- merge(perc.meth.tile, meth.promoters, by=c("chr","end"))
+DT::datatable(perc.meth.tile.plot, extensions = 'Buttons',
+  options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')), caption =  paste0("Percent methylation at significant tiles for ",project, " q < 0.05"))
+scatter_plot <- plot_ly(data = perc.meth.tile, x = ~avg_treat, y = ~avg_ctrl, text = ~coord, type = 'scatter', mode = 'markers', marker = list(size = 10))
+
+# Customize layout
+scatter_plot <- scatter_plot %>% layout(
+  xaxis = list(title = "Average Treatment"),
+  yaxis = list(title = "Average Control"),
+  hovermode = "closest",
+  title = list(text = paste0("Scatter Plot of percent methylation at significant tiles sites for ",project, " q < 0.05"), font = list(size = 10)), font = list(size = 11))
+
+
+# Print the plot
+scatter_plot
+```
+
+```{r, cache=FALSE}
+perc.meth.tile <- perc.meth.tile[perc.meth.tile$meth.diff >=5 | perc.meth.tile$meth.diff <=-5,]
+
+scatter_plot <- plot_ly(data = perc.meth.tile, x = ~avg_treat, y = ~avg_ctrl, text = ~coord, type = 'scatter', mode = 'markers', marker = list(size = 10))
+
+# Customize layout
+scatter_plot <- scatter_plot %>% layout(
+  xaxis = list(title = "Average Treatment"),
+  yaxis = list(title = "Average Control"),
+  hovermode = "closest",
+  title = list( text=paste0("Scatter Plot of promoter percent methylation at significant tiles  for ",project, " q < 0.05 abs. value diff in tile methylation > 5%"),
+                 font = list(size = 10))
+)
+
+# Print the plot
+scatter_plot
+
+```
+
+# Plot change in DNA methylation vs log2FC RNA-seq expression data for treatment vs control
+** Next, we can plot RNA-seq log2FC values against methylation changes between treatment and control, which were attained from the tiling window analysis. Also, we can plot number of significant CpGs vs estimated methylation difference from the DMC analysis, which gave us differentially methylated bases.
+```{r}
+# ## hashing this out for now because I need to get the files set up for the RNAseq data ##
+degs.sig <- read.table(file = DEGfile.lfc, sep = '\t', header = TRUE) # With padj cutoff
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,".rna.meth.sig.min2.rds"))) {
+  rna.meth.sig <- merge(degs.sig, merge.gene, by=c("gene"), all=F)
+  saveRDS(rna.meth.sig,paste0(base_folder,comparison_folder,filename_string,".rna.meth.sig.min2.rds"))} else{
+    rna.meth.sig <- readRDS(file=paste0(base_folder,comparison_folder,filename_string,".rna.meth.sig.min2.rds"))
+  }
+rna.meth.sig$diff.perc <- rna.meth.sig$avg.meth.diff
+
+degs.all <- read.table(file = DEGfile, sep = '\t', header = TRUE) # No cutoff
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,".rna.meth.all.min2.rds"))) {
+  rna.meth.all <- merge(degs.all, merge.gene, by=c("gene"), all=F)
+  saveRDS(rna.meth.all,paste0(base_folder,comparison_folder,filename_string,".rna.meth.all.min2.rds"))} else{
+    rna.meth.all <- readRDS(file=paste0(base_folder,comparison_folder,filename_string,".rna.meth.all.min2.rds"))
+  }
+rna.meth.all$diff.perc <- rna.meth.all$avg.meth.diff
+
+# scatterplot of Log2FC RNA vs methylation difference for promoters
+# Note: here we used the tiled methylation object w/ 100bp window and step size and combined it with the RNA-seq DEGs object
+library(ggplot2)
+png(filename= paste0(base_folder,comparison_folder,filename_string,"meth.tile.sig.png"), res = 140, height=600, width=1000)
+ggplot(rna.meth.sig, aes(x=rna.meth.sig$log2FoldChange, y=rna.meth.sig$diff.perc)) +
+  geom_point()+geom_smooth(method=lm) + xlab(paste0("Log2FC ", project)) + ylab(paste0("Change in methylation fraction", project)) + ggtitle("Log2FC (RNA-seq) vs methylation change for gene promoters")
+dev.off()#Error in dev.off() : cannot shut down device 1 (the null device)
+
+
+rna.meth.all$diff.perc <- rna.meth.all$avg.meth.diff
+# scatterplot of Log2FC RNA vs methylation difference for promoters no cutoff!
+# Note: here we used the tiled methylation object w/ 100bp window and step size and combined it with the RNA-seq DEGs object
+
+#client asked for blue line to be removed so took out the section:"geom_smooth(method=lm,formula = y ~ x)"
+ggplot(rna.meth.all, aes(x=rna.meth.all$log2FoldChange, y=rna.meth.all$diff.perc)) +
+  geom_point()+ xlab(paste0("Log2FC ", project)) + ylab(paste0("Change in methylation fraction", project)) + ggtitle("Log2FC (RNA-seq) vs methylation change for gene promoters")
+
+#Error in dev.off() : cannot shut down device 1 (the null device)
+ggplot(rna.meth.all, aes(x=rna.meth.all$log2FoldChange, y=rna.meth.all$diff.perc)) +
+  geom_point()+ xlab(paste0("Log2FC ", project)) + ylab(paste0("Change in methylation fraction", project)) + ggtitle("All RNA-seq vs methylation change for gene promoters")
+```
+
+```{r}
+library(dplyr)
+if(!file.exists(paste0(base_folder, comparison_folder, filename_string,"perc.meth.cpg.min2.rds"))){
+  perc.meth.cpg=percMethylation(meth, rowids = TRUE)
+  perc.meth.cpg <- as.data.frame(perc.meth.cpg)
+  perc.meth.cpg$avg_treat <- rowMeans(perc.meth.cpg[,colnames(perc.meth.cpg) %in% treated], na.rm = TRUE)
+  perc.meth.cpg$avg_ctrl <- rowMeans(perc.meth.cpg[, colnames(perc.meth.cpg) %in% control], na.rm = TRUE)
+  perc.meth.cpg$coord <- rownames(perc.meth.cpg)
+  meth.bed2$coord <- paste0(meth.bed2$chr,".",meth.bed2$start,".",meth.bed2$end)
+  perc.meth.cpg <- merge(perc.meth.cpg, meth.bed2, by="coord")
+  rm(meth.tester)
+#saving a new version with the avg meth added in.
+saveRDS(perc.meth.cpg, file = paste0(base_folder, comparison_folder, filename_string,"perc.meth.cpg.min2.rds"))
+}else{
+  perc.meth.cpg <- readRDS(paste0(base_folder, comparison_folder, filename_string,"perc.meth.cpg.min2.rds"))
+  
+}
+
+perc.meth.cpg <- perc.meth.cpg[perc.meth.cpg$qvalue <=0.05,]
+saveRDS(perc.meth.cpg, file = paste0(base_folder, comparison_folder, filename_string,"perc.meth.cpg.min2.q0.05.rds"))
+```
+
+## Percent Scatterplots for significant CpG sites all (not just promoter regions )
+
+```{r, cache=FALSE}
+library(plotly)
+scatter_plot <- plot_ly(data = perc.meth.cpg, x = ~avg_treat, y = ~avg_ctrl, text = ~coord, type = 'scatter', mode = 'markers', marker = list(size = 10))
+
+# Customize layout
+scatter_plot <- scatter_plot %>% layout(
+  xaxis = list(title = "Average Treatment"),
+  yaxis = list(title = "Average Control"),
+  hovermode = "closest",
+  title = list(text = paste0("Scatter Plot of percent methylation at significant CpG sites for ",project, " q < 0.05"), font = list(size = 11))
+)
+
+# Print the plot
+scatter_plot
+```
+
+
+```{r, cache=FALSE}
+perc.meth.cpg <- perc.meth.cpg [perc.meth.cpg$meth.diff >=5 | perc.meth.cpg$meth.diff <=-5,]
+
+scatter_plot <- plot_ly(data = perc.meth.cpg, x = ~avg_treat, y = ~avg_ctrl, text = ~coord, type = 'scatter', mode = 'markers', marker = list(size = 10))
+
+# Customize layout
+scatter_plot <- scatter_plot %>% layout(
+  xaxis = list(title = "Average Treatment"),
+  yaxis = list(title = "Average Control"),
+  hovermode = "closest",
+  title = list( text= paste0("Scatterplot of promoter percent methylation at significant CpG sites for ",project, " q < 0.05 abs. value diff in CpG methylation > 5%"), font = list(size = 11))
+)
+
+# Print the plot
+scatter_plot
+
+```
+
+## Plot for annotated differentially methylated bases (DMCs) for CpGs
+
+```{r}
+library(dplyr)
+# get dataframe object for DMCs and annotate
+#saveRDS(select.meth.dmc, file = "select.meth.dmc.sow2.rds")
+#select.meth.dmc <- readRDS(file = "select.meth.dmc.rds")
+library(ChIPseeker)
+cpg.bed <- getData(myDiff)
+cpg.bed <- cpg.bed[,c(1,2,3)]
+write.table(cpg.bed, paste0(base_folder, comparison_folder, filename_string,"cpg.min2.bed"), sep="\t", col.names=FALSE, row.names=FALSE, append=TRUE, quote=FALSE)
+if(!file.exists(paste0(base_folder, comparison_folder, filename_string,"cpg.anno.min2.rds"))){
+  cpg.anno <- ChIPseeker::annotatePeak(paste0(base_folder, comparison_folder, filename_string,"cpg.min2.bed"), tssRegion=c(-1000, 300), TxDb=TxDb.Hsapiens.UCSC.hg38.knownGene, verbose=FALSE)
+  saveRDS(cpg.anno, file = paste0(base_folder, comparison_folder, filename_string,"cpg.anno.min2.rds"))
+} else {
+  cpg.anno <- readRDS(paste0(base_folder, comparison_folder, filename_string,"cpg.anno.min2.rds"))
+}
+
+#Plot 
+plotAnnoBar(cpg.anno, title="Feature distribution for DMCs")
+plotAnnoPie(cpg.anno, title="Pie chart for DMCs")
+plotDistToTSS(cpg.anno, title="Distribution of transcription factor-binding loci \n relative to TSS")
+```
+
+```{r}
+cpg_annot <- as.data.frame(cpg.anno@anno)
+rm(cpg.anno)
+names(cpg_annot)[1]<-paste("chr")
+cpg_annot <- cpg_annot[order(cpg_annot$chr), ]
+library(ChIPseeker)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+library(EnsDb.Hsapiens.v75)
+#library(annotables)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+keytypes(TxDb.Hsapiens.UCSC.hg38.knownGene)
+##based on reading ALL the otherfiles and checking I think this is right because select.meth is a tiled/dmr object
+library(methylKit)
+
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,"cpg.promoters.min2.rds"))){
+  select.meth.dmc <- readRDS(file = paste0(base_folder,comparison_folder,filename_string,".select.meth2.rds"))
+  cpg.annot.merge <- merge(select.meth.dmc, cpg_annot, by=c("chr", "end"), all=F)
+  cpg.promoters <- cpg.annot.merge[cpg.annot.merge$annotation=="Promoter",]
+  cpg.promoters <- cpg.promoters %>% dplyr::filter(pvalue <= 0.01) # filter by pvalue 
+  cpg.promoters <- unique(cpg.promoters) # removing direct duplicates of promoters due to y annotation
+  saveRDS(cpg.promoters, file =paste0(base_folder, comparison_folder,
+                    filename_string,"cpg.promoters.min2.rds"))
+ }else{
+          cpg.promoters <- readRDS(file =paste0(base_folder, comparison_folder,filename_string,"cpg.promoters.min2.rds"))}
+
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,"cpg.counts.min2.rds"))){
+  cpg.counts <- cpg.promoters %>% group_by(geneId) %>% summarise(n=n())
+  saveRDS(cpg.counts, file =paste0(base_folder, comparison_folder,
+                    filename_string,"cpg.counts.min2.rds"))
+ }else{
+          cpg.counts <- readRDS(file =paste0(base_folder, comparison_folder,filename_string,"cpg.counts.min2.rds"))}
+
+perc.meth.cpg.plot <- merge(perc.meth.cpg, cpg.promoters, by=c("chr","end"))
+DT::datatable(perc.meth.cpg.plot, extensions = 'Buttons',
+  options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')), caption =  paste0("Percent methylation at significant CpG sites for ",project, " promoter q < 0.05"))
+rm(cpg_annot)
+rm(perc.meth.cpg)
+```
+
+# Upstream Chromosome tile plots
+
+##```{r otherggplots}
+# Loess method
+#ggplot(rna.meth, aes(x=rna.meth$log2FoldChange, y=rna.meth$diff.perc))+
+#  geom_point()+
+#  geom_smooth() + xlab("Log2FC EPI-021 vs control") + ylab("Change in methylation fraction EPI-021 vs control") + ggtitle("Log2FC (RNA-seq) vs methylation change for gene promoters")
+
+#ggplot(rna.meth, aes(x=rna.meth$log2FoldChange, y=rna.meth$diff.perc)) +
+#  geom_point(shape=18, color="blue")+
+#  geom_smooth(method=lm,  linetype="dashed",
+#             color="darkred", fill="blue")+ xlab("Log2FC EPI-021 vs control") + ylab("Change in methylation fraction EPI-021 vs #control") + ggtitle("Log2FC (RNA-seq) vs methylation change for gene promoters")
+# plot of RNA vs Methylation 
+#p <- ggplot(rna.meth, aes(x=rna.meth$log2FoldChange, y=rna.meth$diff.perc)) + xlab("Log2FC EPI-021 vs control") + ylab("Change #in methylation fraction EPI-021 vs control") + ggtitle("Log2FC (RNA-seq) vs methylation change for gene promoters")
+#p + geom_bin2d()
+
+# Scatterplot # significant CpGs vs methylation difference
+# Note: here we use the original myDiff object with base pair coverage to get methylation difference/DMCs for CpGs
+#select.cpg <- getData(myDiff)
+#select.cpg <- select(myDiff,1:224569)
+# write bedfile
+
+if(!file.exists(paste0(base_folder,comparison_folder,filename_string,"cpg.meth.min2.rds"))){# merge with promoters: total 190 CpG promoters
+  cpg.meth <- merge(cpg.promoters,cpg.counts, by=c("geneId"), all=F)
+  cpg.meth$diff.perc <- cpg.meth$meth.diff/100 # calculate estimated methylation difference
+  saveRDS(cpg.meth,paste0(base_folder,comparison_folder,filename_string,"cpg.meth.min2.rds"))
+}else{
+  cpg.meth <- readRDS(paste0(base_folder,comparison_folder,filename_string,"cpg.meth.min2.rds"))
+}
+
+# Plot CpGs vs methylation difference
+ggplot(cpg.meth, aes(x=cpg.meth$diff.perc, y=cpg.meth$n))+
+  geom_point()+
+  xlab("Estimated methylation difference") + ylab("Number of significant CpGs") + ggtitle("Estimated methylation difference vs number of significant CpGs for DMCs")
+
+# Plot DMRs vs methylation difference
+dmr.meth <- merge(meth.promoters,meth.counts, by=c("geneId"), all=F)
+dmr.meth$diff.perc <- dmr.meth$meth.diff/100 # calculate estimated methylation difference
+
+ggplot(dmr.meth, aes(x=dmr.meth$diff.perc, y=dmr.meth$n))+
+  geom_point()+
+  xlab("Estimated methylation difference") + ylab("Number of significant DMRs") + ggtitle("Estimated methylation difference vs number of significant DMRs: Tiles=100bp")
+
+#saveRDS(cpg.meth, file = "cpg.meth.rds")
+#saveRDS(rna.meth, file = "rna.meth.rds")
+
+# x=c(2,8,11,19)
+# # chr4:190059741-190069840
+# # chr14:16098801-16108900
+# select.roi=select.meth[select.meth$start>=16098801 & select.meth$end <=16103900,]
+# select.roi$region=16103900-select.roi$end
+# region <- as.character(select.roi$region)
+# select.roi <- select.roi[2:14,]
+
+# lm_fit <- lm(end ~ meth.diff, data=select.roi)
+# summary(lm_fit)
+# predicted <- data.frame(x_pred = predict(lm_fit, select.roi),meth.diff=select.roi$meth.diff)
+# 
+# ggplot(select.roi, aes(x=start, y=meth.diff)) +
+#     geom_point() +
+#     #geom_smooth(method = "loess", formula = y ~ x) +
+#     geom_line() +
+#     xlab("Distance from TSS") + ylab("methylation difference") + ggtitle("Methylation difference at chr14: 16103801- 16103900")
+    #geom_line(color='red',data = predicted, aes(x=x_pred, y=meth.diff))
+###chromosome 4 
+# chr4:190059741-190069840
+# select.roi.chr4=select.meth[select.meth$start>=190059741 & select.meth$end<=190069840,]
+# select.roi.chr4$region=190069840-select.roi.chr4$end
+# regionchr4 <- as.character(select.roichr4$region)
+# select.roi.chr4 <- select.roi.chr4[2:14,]
+# 
+# lm_fit <- lm(end ~ meth.diff, data=select.roichr4)
+# summary(lm_fit)
+# predicted <- data.frame(x_pred = predict(lm_fit, select.roichr4),meth.diff=select.roichr4$meth.diff)
+# 
+# ggplot(select.roichr4, aes(x=start, y=meth.diff)) +
+#     geom_point() +
+#     #geom_smooth(method = "loess", formula = y ~ x) +
+#     geom_line() +
+#     xlab("Distance from TSS") + ylab("methylation difference") + ggtitle("Methylation difference at chr4:190059741-190069840")
+#     #geom_line(color='red',data = predicted, aes(x=x_pred, y=meth.diff))
+
+#```
