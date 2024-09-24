@@ -1,7 +1,7 @@
 ---
 title: |
   <center> Epic-Bio Bulk DNA Methylation Downstream Analysis EPI321 vs Untreated, min=2L (Merged Samples) </center>
-subtitle: "Sabra Djomehri & Emily Dabe, Excelra"
+subtitle: "Tyler Borrman"
 params:
   eval_chunk: TRUE
 output:
@@ -9,8 +9,7 @@ output:
     toc: true
     toc_depth: 2
     self_contained: yes
-    template: "/home/rstudio/00_code/opp_markdown_reports/op2_template/report.html"
-template_dir: "/home/rstudio/00_code/opp_markdown_reports/op2_template"
+
 
 ---
 
@@ -35,40 +34,47 @@ library(ggplot2)
 ** Next we perform descriptive statistics on all samples: check basic stats about methylation data (e.g. coverage and percent methylation), plots of the percent methylation distribution and the read coverage per base.
 ```{r}
 #setting analysis variables 
-base_folder="/home/rstudio/01_input/"
-comparison_folder="EPI.vs.Cntrl/coverage"
-filename_string="methyl.part4.merged.EPIvCtrl"
+#base_folder="/home/rstudio/01_input/"
+base_folder="/home/tylerborrman/"
+#comparison_folder="EPI.vs.Cntrl/coverage"
+comparison_folder="epic-methylseq_data/test_12ABIC/"
+filename_string="test_12ABIC"
 ## DEGfiles only needed if comparative RNA vs DNA methylation plots will be made at the end of Rmd currently commented out
 DEGfile.lfc="/home/rstudio/00_code/Dec2023_part4_RNA_degs_all_lfc2.tsv"
 DEGfile="/home/rstudio/00_code/Dec2023_part4_RNA_degs_all_noCutoff.tsv"
 project="merged EPI321 vs Control"
 #sample ids must be in alpha numeric order 
-sample.ids=c("c1","c2","c4","c5","c7","c8")
+# sample.ids=c("c1","c2","c4","c5","c7","c8")
+sample.ids =c("LS12", "LS13", "LS15", "LS16")
 #treaatment vector control is "0" treated is "1" for comparison
-treatment.vector=c(0,1,0,1,0,1)
+treatment.vector=c(0,0,1,1)
 # these two variables used to be used later on in the code leaving in case removing breaks something 
-treated= c("c2", "c5", "c8") #epi321
-control=c("c1", "c4", "c7") #untreated
+treated= c("LS15", "LS16") #epi321
+control=c("LS12", "LS13") #untreated
 
 # Read in bismark coverage files (unzipped) to generate "myobj" file will only work if a file with filename_string with an rds extension doesn't already exist. 
-if (file.exists(paste0(base_folder,comparison_folder,filename_string,".rds"))) {
-  myobj <- readRDS(file = paste0(base_folder,comparison_folder,filename_string,".rds"))
-} else {
-  files <- list.files(paste0(base_folder,comparison_folder), pattern = ".cov", full.names = T)
-  file.list <- as.list(files)
-  # read methylation call files and store them as flat file database
-  myobj=methRead(file.list,
-                 sample.id=list("c1","c2","c4","c5","c7","c8"),
-                 assembly="GRCh38",
-                 pipeline="bismarkCoverage",
-                 treatment=treatment.vector,
-                 context="CpG",
-                 dbtype = "tabix",
-                 dbdir = "methylDB",
-                 header =F
-  ) 
-  saveRDS(myobj, file = paste0(base_folder,comparison_folder,filename_string,".rds"))
-}
+# if (file.exists(paste0(base_folder,comparison_folder,filename_string,".rds"))) {
+#   myobj <- readRDS(file = paste0(base_folder,comparison_folder,filename_string,".rds"))
+# } else {
+files <- list.files(paste0(base_folder,comparison_folder), pattern = ".cov", full.names = T)
+file.list <- as.list(files)
+# read methylation call files and store them as flat file database
+# Note gzipped files are supported
+# Note that the doc for methylKit says bismark coverage files have 5 cols, 
+# but the bismark coverage files have 6 cols and the code for the methylKit methRead function expects 6 cols:
+# chr, start, end, % meth, count methylated, count unmethylated
+myobj=methRead(file.list,
+                sample.id=list("LS12", "LS13", "LS15", "LS16"),
+                assembly="chm13v2",
+                pipeline="bismarkCoverage",
+                treatment=treatment.vector,
+                context="CpG",
+                dbtype = "tabix",
+                dbdir = "methylDB",
+                header = FALSE
+) 
+saveRDS(myobj, file = paste0(base_folder,comparison_folder,filename_string,".rds"))
+# }
 # Descriptive statistics on samples
 getMethylationStats(myobj[[1]],plot=TRUE,both.strands=FALSE) # check methylation stats on first sample
 getCoverageStats(myobj[[1]],plot=TRUE,both.strands=FALSE) # check coverage stats on first  sample 
