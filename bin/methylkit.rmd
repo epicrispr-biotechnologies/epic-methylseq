@@ -146,7 +146,10 @@ if(!file.exists(paste0(base_folder,comparison_folder,"meth.tile.",filename_strin
  }
 
 ```
+
 ## DMR no cut-off Tiling hyper/hypo methylated regions per chromosome
+** In this section we will visualize the distribution of hypo/hyper-methylated bases/regions per chromosome.
+
 ```{r}
 # diffMethPerChr(myDiff.tile,plot=TRUE,qvalue.cutoff=1, meth.cutoff=25)
 diffMethPerChr(myDiff.tile,plot=TRUE,qvalue.cutoff=1, meth.cutoff=21)
@@ -184,12 +187,12 @@ if(!file.exists(paste0(base_folder,comparison_folder,filename_string,"myDiff_10_
   }
 
 ```
-## Annotating differentially methylated regions (DMRs)
+<!-- ## Annotating differentially methylated regions (DMRs)
 ** In this section we will annotate differentially methylated regions with promoter/exon/intron using annotation data: 
 ** Files tested: fantom5_hg38_cage_peaks.txt, hg38_fair+new_CAGE_peaks_phase1and2.bed, hg38_liftover+new_CAGE_peaks_phase1and2_ann.txt
 ** get a bed file from hg38 regions (hg38_RefSeq.bed) and flank 1000bp up and 300bp down
 ** Next, summarize methylation information over a set of defined regions such as promoters. Regions of interest given as a GRanges object.
-** From tiling at window=100bp, total DMRs found were 123,229, total promoters are 47,019, after gene annotations (46,515 obs)
+** From tiling at window=100bp, total DMRs found were 123,229, total promoters are 47,019, after gene annotations (46,515 obs) -->
 
 ```{r}
 # ##hashed out because it only needs to be run once to generate proximal promoter regions 
@@ -273,10 +276,10 @@ if(!file.exists(paste0(base_folder,comparison_folder,filename_string,"myDiff_10_
 
 ```
 
-## Global Methylation Statistics tables 
+<!-- ## Global Methylation Statistics tables 
 In this first set of statistics tables DMRs and DMCs per region are tabulated with "getTargetAnnotationStats" . No filter for qvalue (FDR statistic) or percent methylation cut-off of is applies but precedence is added. Precedence means no methylation will be counted twice even if it overlaps with two different exons or two features. The priority for precedence calling is: 
    promoter>exon>intron .
-So this means that if a methylated site or tile overlaps with a promoter it will be counted as promoter overlapping only, or if it is overlapping with a an exon but not a promoter, #' it will be counted as exon overlapping only whether or not it overlaps with an intron.
+So this means that if a methylated site or tile overlaps with a promoter it will be counted as promoter overlapping only, or if it is overlapping with a an exon but not a promoter, #' it will be counted as exon overlapping only whether or not it overlaps with an intron. -->
 
 
 ```{r}
@@ -437,7 +440,7 @@ write.table(meth.bed2, paste0(base_folder, comparison_folder, filename_string,".
 # }
 ```
 
-## Percent methylation for tiles (all dots not promoter) 
+## Percent methylation for tiles
 
 ```{r}
 if(!file.exists(paste0(base_folder, comparison_folder, filename_string,"perc.meth.tile.all.rds"))){
@@ -499,8 +502,9 @@ scatter_plot
 
 ```
 
-# Plot change in DNA methylation vs log2FC RNA-seq expression data for treatment vs control
-** Next, we can plot RNA-seq log2FC values against methylation changes between treatment and control, which were attained from the tiling window analysis. Also, we can plot number of significant CpGs vs estimated methylation difference from the DMC analysis, which gave us differentially methylated bases.
+<!-- # Plot change in DNA methylation vs log2FC RNA-seq expression data for treatment vs control
+** Next, we can plot RNA-seq log2FC values against methylation changes between treatment and control, which were attained from the tiling window analysis. Also, we can plot number of significant CpGs vs estimated methylation difference from the DMC analysis, which gave us differentially methylated bases. -->
+
 ```{r}
 # # ## hashing this out for now because I need to get the files set up for the RNAseq data ##
 # degs.sig <- read.table(file = DEGfile.lfc, sep = '\t', header = TRUE) # With padj cutoff
@@ -599,8 +603,6 @@ scatter_plot
 # scatter_plot
 
 ```
-
-## Plot for annotated differentially methylated bases (DMCs) for CpGs
 
 ```{r}
 # library(dplyr)
