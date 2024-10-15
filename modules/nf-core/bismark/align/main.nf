@@ -5,7 +5,7 @@ process BISMARK_ALIGN {
     conda "bioconda::bismark=0.24.0"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
         'https://depot.galaxyproject.org/singularity/bismark:0.24.0--hdfd78af_0' :
-        'biocontainers/bismark:0.24.0--hdfd78af_0' }"
+        '075615082992.dkr.ecr.us-west-2.amazonaws.com/bismark:0.24.0' }"
 
     input:
     tuple val(meta), path(reads)
