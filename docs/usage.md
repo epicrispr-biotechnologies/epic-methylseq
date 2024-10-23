@@ -12,6 +12,8 @@
 - [Running the pipeline](#running-the-pipeline)
   - [Updating the pipeline](#updating-the-pipeline)
   - [Reproducibility](#reproducibility)
+- [Running DESeq2](#running-deseq2)
+
 
 ## Introduction
 
@@ -174,6 +176,33 @@ To further assist in reproducbility, you can use share and re-use [parameter fil
 :::tip
 If you wish to share such profile (such as upload as supplementary material for academic publications), make sure to NOT include cluster specific paths to files, nor institutional specific profiles.
 :::
+## Running DESeq2
+Usage from R console:
+```
+rmarkdown::render(
+  "bin/methylkit.rmd", 
+  params = list(
+    study = "JIRA_BDS-XXXX_12ABIC_EPI321_vs_CONTROL", 
+    metadata_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/samplesheet_test_12ABIC.csv",
+    bismark_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC",
+    out_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit",
+    assembly = "hg38"
+  )
+)
+```
+Usage from command line:
+```
+Rscript -e "rmarkdown::render(
+  'bin/methylkit.rmd',
+  params = list(
+    study = 'JIRA_BDS-XXXX_12ABIC_EPI321_vs_CONTROL',
+    metadata_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC/samplesheet_test_12ABIC.csv',
+    bismark_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC',
+    out_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit',
+    assembly = 'hg38'
+  )
+)"
+```
 
 ## Core Nextflow arguments
 
