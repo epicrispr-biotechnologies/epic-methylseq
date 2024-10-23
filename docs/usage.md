@@ -1,4 +1,4 @@
-# nf-core/methylseq: Usage
+# epic-methylseq: Usage
 
 ## :warning: Please read this documentation on the nf-core website: [https://nf-co.re/methylseq/usage](https://nf-co.re/methylseq/usage)
 
@@ -12,7 +12,7 @@
 - [Running the pipeline](#running-the-pipeline)
   - [Updating the pipeline](#updating-the-pipeline)
   - [Reproducibility](#reproducibility)
-- [Running DESeq2](#running-deseq2)
+- [Running methylKit](#running-methylkit)
 
 
 ## Introduction
@@ -176,7 +176,7 @@ To further assist in reproducbility, you can use share and re-use [parameter fil
 :::tip
 If you wish to share such profile (such as upload as supplementary material for academic publications), make sure to NOT include cluster specific paths to files, nor institutional specific profiles.
 :::
-## Running DESeq2
+## Running methylKit
 Usage from R console:
 ```
 rmarkdown::render(
