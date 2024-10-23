@@ -177,19 +177,14 @@ To further assist in reproducbility, you can use share and re-use [parameter fil
 If you wish to share such profile (such as upload as supplementary material for academic publications), make sure to NOT include cluster specific paths to files, nor institutional specific profiles.
 :::
 ## Running methylKit
-Usage from R console:
+### Installing dependencies and conda environment
 ```
-rmarkdown::render(
-  "bin/methylkit.rmd", 
-  params = list(
-    study = "JIRA_BDS-XXXX_12ABIC_EPI321_vs_CONTROL", 
-    metadata_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/samplesheet_test_12ABIC.csv",
-    bismark_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC",
-    out_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit",
-    assembly = "hg38"
-  )
-)
+cd epic-methylseq
+git checkout methylkit
+conda env create -f modules/local/methylkit/environment.yml --name methylkit_env
+conda activate methylkit_env
 ```
+### Running methylKit and generating markdown report
 Usage from command line:
 ```
 Rscript -e "rmarkdown::render(
@@ -203,6 +198,36 @@ Rscript -e "rmarkdown::render(
   )
 )"
 ```
+Usage from R console:
+```
+rmarkdown::render(
+  "bin/methylkit.rmd", 
+  params = list(
+    study = "JIRA_BDS-XXXX_12ABIC_EPI321_vs_CONTROL", 
+    metadata_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/samplesheet_test_12ABIC.csv",
+    bismark_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC",
+    out_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit",
+    assembly = "hg38"
+  )
+)
+```
+### Input Data
+- **study**: Study Name with JIRA ID prefix
+- **metadata_path**: path to samplesheet used in nfcore/methylseq pipeline with additional condition column
+  ```
+  sample,fastq_1,fastq_2,condition
+  LS-12,LS-12_R1_001.fastq.gz,LS-12_R2_001.fastq.gz,CONTROL
+  LS-13,LS-13_R1_001.fastq.gz,LS-13_R2_001.fastq.gz,CONTROL
+  LS-15,LS-15_R1_001.fastq.gz,LS-15_R2_001.fastq.gz,EPI321
+  LS-16,LS-16_R1_001.fastq.gz,LS-16_R2_001.fastq.gz,EPI321
+  ```
+- **bismark_path**: path to local directory containing bismark coverage files (`.deduplicated.bismark.cov`) located in `/bismark/methylation_calls/methylation_coverage/` directory of nf-core/methylseq output
+- **out_path**: path to local directory to save methylkit output files
+- **assembly**: genome assembly used in the analysis (e.g. hg38, mm10)
+
+### Output Data
+- **methylkit.html**: R markdown report located in `epic-methylseq/bin/`
+- **.tsv**: methylkit output files located in `out_path`
 
 ## Core Nextflow arguments
 
