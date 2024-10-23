@@ -31,7 +31,8 @@ rmarkdown::render(
     study = "JIRA_BDS-XXXX_12ABIC_EPI321_vs_CONTROL", 
     metadata_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/samplesheet_test_12ABIC.csv",
     bismark_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC",
-    out_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit"
+    out_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit",
+    assembly = "hg38"
   )
 )
 
@@ -42,7 +43,8 @@ Rscript -e "rmarkdown::render(
     study = 'JIRA_BDS-XXXX_12ABIC_EPI321_vs_CONTROL',
     metadata_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC/samplesheet_test_12ABIC.csv',
     bismark_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC',
-    out_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit'
+    out_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit',
+    assembly = 'hg38'
   )
 )"
 
@@ -51,6 +53,7 @@ params:
   metadata_path: path to samplesheet used in nfcore/methylseq pipeline with additional condition column
   bismark_path: path to directory containing bismark coverage files (.deduplicated.bismark.cov)
   out_path: path to directory to save methylkit output files
+  assembly: genome assembly used in the analysis (e.g. hg38, mm10)
 -->
 
 ```{r setup, include=FALSE} 
@@ -196,8 +199,8 @@ select.meth2 <- getData(myDiff) #DMCs
 # write bedfile
 meth.bed <- as.data.frame(select.meth) #dmr
 meth.bed2 <- as.data.frame(select.meth2)#dmc
-write.table(meth.bed, paste0(params$out_path, params$study,".meth.tile.all.bed"), sep="\t", col.names=FALSE, row.names=FALSE, quote=FALSE)
-write.table(meth.bed2, paste0(params$out_path, params$study,".meth.cpg.all.bed"), sep="\t", col.names=FALSE, row.names=FALSE, quote=FALSE)
+write.table(meth.bed, paste0(params$out_path, "/", params$study,".meth.tile.all.bed"), sep="\t", col.names=FALSE, row.names=FALSE, quote=FALSE)
+write.table(meth.bed2, paste0(params$out_path, "/", params$study,".meth.cpg.all.bed"), sep="\t", col.names=FALSE, row.names=FALSE, quote=FALSE)
 ```
 
 
