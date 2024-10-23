@@ -4,6 +4,7 @@ params:
   metadata_path: "path/to/metadata.csv"
   bismark_path: "path/to/bismark"
   out_path: "path/to/methylkit"
+  assembly: "genome_assembly"
 title: |
   | Differential methylation analysis report
   | `r params$study`
@@ -56,9 +57,7 @@ params:
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,cache=FALSE)
 # load packages
 library(DT)
-library(methylKit) 
-library(genomation)
-library(GenomicRanges)
+library(methylKit)
 library(plotly)
 library(ggplot2)
 library(dplyr)
@@ -80,75 +79,58 @@ rownames(metadata) <- metadata$sample
 # Descriptive statistics
 
 ```{r descriptive statistics}
-#setting analysis variables 
-#base_folder="/home/rstudio/01_input/"
-base_folder="/home/tylerborrman/"
-#comparison_folder="EPI.vs.Cntrl/coverage"
-comparison_folder="epic-methylseq_data/test_12ABIC/"
-filename_string="test_12ABIC"
-## DEGfiles only needed if comparative RNA vs DNA methylation plots will be made at the end of Rmd currently commented out
-# DEGfile.lfc="/home/rstudio/00_code/Dec2023_part4_RNA_degs_all_lfc2.tsv"
-# DEGfile="/home/rstudio/00_code/Dec2023_part4_RNA_degs_all_noCutoff.tsv"
-# project="merged EPI321 vs Control"
-#sample ids must be in alpha numeric order 
-# sample.ids=c("c1","c2","c4","c5","c7","c8")
-sample.ids =c("LS12", "LS13", "LS15", "LS16")
-#treaatment vector control is "0" treated is "1" for comparison
-treatment.vector=c(0,0,1,1)
-# these two variables used to be used later on in the code leaving in case removing breaks something 
-treated= c("LS15", "LS16") #epi321
-control=c("LS12", "LS13") #untreated
 
-# Read in bismark coverage files (unzipped) to generate "myobj" file will only work if a file with filename_string with an rds extension doesn't already exist. 
-# if (file.exists(paste0(base_folder,comparison_folder,filename_string,".rds"))) {
-#   myobj <- readRDS(file = paste0(base_folder,comparison_folder,filename_string,".rds"))
-# } else {
-files <- list.files(paste0(base_folder,comparison_folder), pattern = ".cov", full.names = T)
-file.list <- as.list(files)
+# Function to find files with a given prefix
+find_files_with_prefix <- function(prefix, files) {
+  matching_files <- grep(prefix, files, value = TRUE)
+  if (length(matching_files) == 1) {
+    return(matching_files)
+  } else {
+    stop(paste0("ERROR: No file or multiple files found for sample with prefix ", prefix))
+  }
+}
+unordered_files <- list.files(
+  params$bismark_path,
+  pattern = ".cov",
+  full.names = TRUE
+)
+# Ensure files are ordered according to metadata sample sheet
+cov_files <- as.list(sapply(metadata$sample, find_files_with_prefix, files = unordered_files))
+
+# Currently only supporting EPI321 vs Control comparison
+treatment <- ifelse(metadata$condition == "EPI321", 1, 0)
+treated <- metadata$sample[metadata$condition == "EPI321"]
+control <- metadata$sample[metadata$condition == "CONTROL"]
+
 # read methylation call files and store them as flat file database
 # Note gzipped files are supported
 # Note that the doc for methylKit says bismark coverage files have 5 cols, 
 # but the bismark coverage files have 6 cols and the code for the methylKit methRead function expects 6 cols:
 # chr, start, end, % meth, count methylated, count unmethylated
-myobj=methRead(file.list,
-                sample.id=list("LS12", "LS13", "LS15", "LS16"),
-                assembly="chm13v2",
+
+myobj=methRead(cov_files,
+                sample.id=as.list(metadata$sample),
                 pipeline="bismarkCoverage",
-                treatment=treatment.vector,
+                assembly=params$assembly,
+                treatment=treatment,
                 context="CpG",
                 dbtype = "tabix",
                 dbdir = "methylDB",
                 header = FALSE
-) 
-saveRDS(myobj, file = paste0(base_folder,comparison_folder,filename_string,".rds"))
-# }
+)
+
 # Descriptive statistics on samples
 getMethylationStats(myobj[[1]],plot=TRUE,both.strands=FALSE) # check methylation stats on first sample
 getCoverageStats(myobj[[1]],plot=TRUE,both.strands=FALSE) # check coverage stats on first  sample 
-## both hashed out because took too much processing time but can be unhashed if desired 
-#lapply(myobj, function(x) getMethylationStats(x,plot=T,both.strands=FALSE)) # check methylation stats on all samples w/ plot
-#lapply(myobj, function(x) getCoverageStats(x,plot=T,both.strands=FALSE)) # check coverage stats on all samples
-
 ```
 
-##  Comparative Analysis
-** Merged all samples to one object for base-pair locations covered in all samples.
-
-```{r}
-## Comparative analysis
-##  Merging all samples into one file. This is needed as precursor for dmc analyses  
-if(!file.exists(paste0(base_folder,comparison_folder,filename_string,"meth.rds"))){
-  meth=methylKit::unite(myobj, destrand=FALSE)
-  #meth.min=unite(myobj,min.per.group=1L)
-  saveRDS(meth, file = paste0(base_folder,comparison_folder,filename_string,"meth.rds"))
-}else{
-  meth <- readRDS(file = paste0(base_folder,comparison_folder,filename_string,"meth.rds"))
-}
-
-# Sample Correlation PCA plots based on individual CpG sites. Hash out this section to save time. 
-#getCorrelation(meth,plot=TRUE) <- takes FOREVER to compute also had to readjust figure margins to par(mar(1,1,1,1)) to avoid the error. 
+# Comparative Analysis
+## CpG analysis
+```{r comparative analysis}
+# Comparative analysis
+#  Merging all samples into one file. This is needed as precursor for dmc analyses  
+meth=methylKit::unite(myobj, destrand=FALSE)
 clusterSamples(meth, dist="correlation", method="ward.D2", plot=TRUE)
-hc = clusterSamples(meth, dist="correlation", method="ward", plot=FALSE)
 PCASamples(meth, screeplot=TRUE)
 PCASamples(meth, adj.lim=c(0.5,0.5))
 
@@ -156,140 +138,104 @@ PCASamples(meth, adj.lim=c(0.5,0.5))
 
 
 ## Tiling windows analysis
-** For some situations, it might be desirable to summarize methylation information over tiling windows rather than doing base-pair resolution analysis. For example, here we tile the genome with windows of 100bp and step-size 100bp and summarize the methylation information on those tiles. This returns a methylRawList object which can be fed into unite and calculateDiffMeth functions consecutively to get differentially methylated regions. The tilling function adds up C and T counts from each covered cytosine and returns a total C and T count for each tile.
+For some situations, it might be desirable to summarize methylation information over tiling windows rather than doing base-pair resolution analysis.
+For example, here we tile the genome with windows of 100bp and step-size 100bp and summarize the methylation information on those tiles.
+This returns a methylRawList object which can be fed into unite and calculateDiffMeth functions consecutively to get differentially methylated regions.
+The tilling function adds up C and T counts from each covered cytosine and returns a total C and T count for each tile.
 
-```{r}
-#converting my.obj to tile object for sliding 100 bp windows minimum coverage 5 
-if(!file.exists(paste0(base_folder,comparison_folder,"tile.",filename_string,"meth.rds"))) {
-  tile.obj=tileMethylCounts(myobj,win.size=100,step.size=100,cov.bases=5)
-  saveRDS(tile.obj, file = paste0(base_folder,comparison_folder,"tile.",filename_string,"meth.rds"))
-}else{
-  tile.obj <- readRDS(file = paste0(base_folder,comparison_folder,"tile.",filename_string,"meth.rds"))
-  
-}
-## in this version of the code we only required 2 out of the 3 total merged samples (one sample per patient source) to contain a methylation site for it to be included in the comparative analyses if min.per.group is not specified default is all samples must have a specific CpG site or meth tile covered to include it. 
-# if(!file.exists(paste0(base_folder,comparison_folder,"meth.tile.",filename_string,".min2.meth.rds"))){
-#   meth.tile=methylKit::unite(tile.obj, destrand=FALSE, min.per.group = 2L) 
-#   saveRDS(meth.tile, file = paste0(base_folder,comparison_folder,"meth.tile.",filename_string,".min2.meth.rds"))
-# }else{
-#     meth.tile <-readRDS(file = paste0(base_folder,comparison_folder,"meth.tile.",filename_string,".min2.meth.rds"))
-# }
+```{r tiling_window_analysis}
 
+# converting my.obj to tile object for sliding 100 bp windows minimum coverage of 5 CpGs 
+tile.obj=tileMethylCounts(myobj,win.size=100,step.size=100,cov.bases=5)
 
-if(!file.exists(paste0(base_folder,comparison_folder,"meth.tile.",filename_string,".all.meth.rds"))){
-  meth.tile=methylKit::unite(tile.obj, destrand=FALSE) 
-  saveRDS(meth.tile, file = paste0(base_folder,comparison_folder,"meth.tile.",filename_string,".all.meth.rds"))
-}else{
-    meth.tile <-readRDS(file = paste0(base_folder,comparison_folder,"meth.tile.",filename_string,".all.meth.rds"))
-}
+# in this version of the code we only required 2 out of the 3 total merged samples (one sample per patient source) to contain a methylation site for it to be included in the comparative analyses if min.per.group is not specified default is all samples must have a specific CpG site or meth tile covered to include it. 
+# meth.tile=methylKit::unite(tile.obj, destrand=FALSE, min.per.group = 2L) 
 
- PCASamples(meth.tile)
+# In this version of the code we are requiring all samples to have a methylation site for it to be included in the comparative analyses.
+meth.tile=methylKit::unite(tile.obj, destrand=FALSE)
+
+PCASamples(meth.tile)
 # find DMRs 
- if(!file.exists(paste0(base_folder,comparison_folder,"myDiffmeth.tile.",filename_string,".all.meth.rds"))){
-   myDiff.tile=calculateDiffMeth(meth.tile)
-   saveRDS(myDiff.tile,file=paste0(base_folder,comparison_folder,"myDiffmeth.tile.",filename_string,".all.meth.rds"))
- }else{
-   myDiff.tile <- readRDS(paste0(base_folder,comparison_folder,"myDiffmeth.tile.",filename_string,".all.meth.rds"))
- }
-
+myDiff.tile=calculateDiffMeth(meth.tile)
 ```
 
-## DMR no cut-off Tiling hyper/hypo methylated regions per chromosome
+# DMR no cut-off Tiling hyper/hypo methylated regions per chromosome
 ** In this section we will visualize the distribution of hypo/hyper-methylated bases/regions per chromosome.
 
-```{r}
+```{r hyper/hypo_methylation}
 # diffMethPerChr(myDiff.tile,plot=TRUE,qvalue.cutoff=1, meth.cutoff=25)
 diffMethPerChr(myDiff.tile,plot=TRUE,qvalue.cutoff=1, meth.cutoff=21)
 
 
 ```
 
-## Differentially methylated bases or regions
-** The calculateDiffMeth() function is the main function to calculate differential methylation. Depending on the sample size per each set it will either use Fisher’s exact or logistic regression to calculate P-values. P-values will be adjusted to Q-values using SLIM method (Wang, Tuominen, and Tsai 2011). Note: if we have replicates, the function will automatically use logistic regression. You can force the calculateDiffMeth() function to use Fisher’s exact test if you pool the replicates when there is only test and control sample groups.
-** We can also visualize the distribution of hypo/hyper-methylated bases/regions per chromosome 
+# Differentially methylated bases or regions
+The calculateDiffMeth() function is the main function to calculate differential methylation.
+Depending on the sample size per each set it will either use Fisher’s exact or logistic regression to calculate P-values.
+P-values will be adjusted to Q-values using SLIM method (Wang, Tuominen, and Tsai 2011).
+Note: if we have replicates, the function will automatically use logistic regression.
+You can force the calculateDiffMeth() function to use Fisher’s exact test if you pool the replicates when there is only test and control sample groups.
 
-```{r}
+```{r diff_meth_cpg}
 
 ## Finding differentially methylated CpGs (differentially methylated regions is in the previous section)
- if(!file.exists(paste0(base_folder,comparison_folder,"myDiff.",filename_string,".all.meth.rds"))){
-   myDiff=calculateDiffMeth(meth)
-   saveRDS(myDiff,file = paste0(base_folder,comparison_folder,"myDiff.",filename_string,".all.meth.rds"))
- }else {
-   myDiff <- readRDS(file = paste0(base_folder,comparison_folder,"myDiff.",filename_string,".all.meth.rds"))
- }
-
-
-```
-
-## Find all differentially methylated bases or regions
-** After q-value calculation, we can select the differentially methylated regions/bases based on q-value and percent methylation difference cutoffs. Here we compute all DMRs in treatment and control samples with and without standard cutoffs. 
-```{r}
-## creating and saving an additional filtered dmc file with a minimum of 5% difference in methylation and a significant qvalue 
-if(!file.exists(paste0(base_folder,comparison_folder,filename_string,"myDiff_10_qval_.01.all.cpg.rds"))){
-  myDiff5p=getMethylDiff(myDiff,difference=10,qvalue=0.01)
-  saveRDS(myDiff5p,paste0(base_folder,comparison_folder,filename_string,"myDiff_10_qval_.01.all.cpg.rds"))}else{
-    myDiff5p <- readRDS(paste0(base_folder,comparison_folder,filename_string,"myDiff_10_qval_.01.all.cpg.rds"))
-  }
-
+myDiff=calculateDiffMeth(meth)
 ```
 
 
-```{r}
-# Convert methylKit objects to GRanges using GenomicRanges package. Coercing methylKit objects to GRanges will give users additional flexibility when customizing their analyses.
+```{r making_bed_files}
 
+# Extracting data from the methylDiff objects and writing to bed files
 
-# Selection: subsetting methylKit Objects to just differentially methylated sites/regions
-# Appears actual subsetting had been removed here and instead we are just saving to csvs
-##for tiling
-if(!file.exists(paste0(base_folder,comparison_folder,filename_string,".all.select.meth.tile.rds"))){
-	select.meth <- getData(myDiff.tile) #DMRs
-	saveRDS(select.meth, file = paste0(base_folder,comparison_folder,filename_string,".all.select.meth.tile.rds"))
-	write.csv(select.meth, paste0(base_folder, comparison_folder,filename_string,".all.select.meth.tile.csv"), sep="\t", col.names=T, row.names=FALSE, append=TRUE, quote=FALSE)
-}else{
-	select.meth <- readRDS(file = paste0(base_folder,comparison_folder,filename_string,".all.select.meth.tile.rds"))
-}
+## for tiling
+select.meth <- getData(myDiff.tile) #DMRs
+
 ## for CpG sites 
-if(!file.exists(paste0(base_folder,comparison_folder,filename_string,".select.meth2.rds"))){
-	select.meth2 <- getData(myDiff) #DMCs
-	saveRDS(select.meth2, file = paste0(base_folder,comparison_folder,filename_string,".select.meth2.rds"))
-	write.csv(select.meth2, paste0(base_folder, comparison_folder,filename_string,".all.select.meth.csv"), sep="\t", col.names=T, row.names=FALSE, append=TRUE, quote=FALSE)
-}else{
-select.meth2 <- readRDS(file = paste0(base_folder,comparison_folder,filename_string,".select.meth2.rds"))
-}
+select.meth2 <- getData(myDiff) #DMCs
 
 # write bedfile
 meth.bed <- as.data.frame(select.meth) #dmr
 meth.bed2 <- as.data.frame(select.meth2)#dmc
-write.table(meth.bed, paste0(base_folder, comparison_folder, filename_string,".meth.tile.all.bed"), sep="\t", col.names=FALSE, row.names=FALSE, append=TRUE, quote=FALSE)
-write.table(meth.bed2, paste0(base_folder, comparison_folder, filename_string,".meth.cpg.all.bed"), sep="\t", col.names=FALSE, row.names=FALSE, append=TRUE, quote=FALSE)
+write.table(meth.bed, paste0(params$out_path, params$study,".meth.tile.all.bed"), sep="\t", col.names=FALSE, row.names=FALSE, quote=FALSE)
+write.table(meth.bed2, paste0(params$out_path, params$study,".meth.cpg.all.bed"), sep="\t", col.names=FALSE, row.names=FALSE, quote=FALSE)
 ```
 
 
+```{r percent_methylation_tile}
 
+perc.meth.tile=percMethylation(meth.tile, rowids = TRUE)
+perc.meth.tile <- as.data.frame(perc.meth.tile)
+perc.meth.tile$avg_treat <- rowMeans(perc.meth.tile[, colnames(perc.meth.tile) %in% treated], na.rm = TRUE)
+perc.meth.tile$avg_ctrl <- rowMeans(perc.meth.tile[, colnames(perc.meth.tile) %in% control], na.rm = TRUE)
+perc.meth.tile$coord <- rownames(perc.meth.tile)
+meth.bed$coord <- paste0(meth.bed$chr,".",meth.bed$start,".",meth.bed$end)
+perc.meth.tile <- merge(perc.meth.tile, meth.bed, by="coord")
 
-## Percent methylation for tiles
-
-```{r}
-if(!file.exists(paste0(base_folder, comparison_folder, filename_string,"perc.meth.tile.all.rds"))){
-  perc.meth.tile=percMethylation(meth.tile, rowids = TRUE)
-  perc.meth.tile <- as.data.frame(perc.meth.tile)
-  perc.meth.tile$avg_treat <- rowMeans(perc.meth.tile[, colnames(perc.meth.tile) %in% treated], na.rm = TRUE)
-  perc.meth.tile$avg_ctrl <- rowMeans(perc.meth.tile[, colnames(perc.meth.tile) %in% control], na.rm = TRUE)
-  perc.meth.tile$coord <- rownames(perc.meth.tile)
-  meth.bed$coord <- paste0(meth.bed$chr,".",meth.bed$start,".",meth.bed$end)
-  perc.meth.tile <- merge(perc.meth.tile, meth.bed, by="coord")
-  # This is the final MR file we want!!!! 
-  saveRDS(perc.meth.tile, file = paste0(base_folder, comparison_folder,
-                                        filename_string,"perc.meth.tile.all.rds"))
-}else{
-  perc.meth.tile <- readRDS(paste0(base_folder, comparison_folder, filename_string,"perc.meth.tile.all.rds"))
-}
-
+# This is the final MR file we want!!!! 
+write.table(
+  perc.meth.tile,
+  file = paste0(params$out_path, "/", params$study,".perc.meth.tile.all.tsv"),
+  sep="\t",
+  col.names=TRUE,
+  row.names=FALSE,
+  quote=FALSE
+)
 # This is the final DMR file we want!!!!
 perc.meth.tile.sig <- perc.meth.tile[perc.meth.tile$qvalue <=0.01 & abs(perc.meth.tile$meth.diff) > 10,]
 
-#saving a new version with the avg meth added in.
-saveRDS(perc.meth.tile.sig, file = paste0(base_folder, comparison_folder, filename_string,"perc.meth.tile.all.q0.01.methdiff.10.rds"))
+write.table(
+  perc.meth.tile.sig,
+  file = paste0(params$out_path, "/", params$study,".perc.meth.tile.all.q0.01.methdiff.10.tsv"),
+  sep="\t",
+  col.names=TRUE,
+  row.names=FALSE,
+  quote=FALSE
+)
+```
+
+## Percent Scatterplots for significant tiles all
+
+```{r scatter_tile}
 ## plotting only tiles with q <-0.05
 # perc.meth.tile.plot <- merge(perc.meth.tile, meth.promoters, by=c("chr","end"))
 # DT::datatable(perc.meth.tile.plot, extensions = 'Buttons',
@@ -311,31 +257,41 @@ scatter_plot
 ```
 
 
-```{r}
-if(!file.exists(paste0(base_folder, comparison_folder, filename_string,"perc.meth.cpg.all.rds"))){
-  perc.meth.cpg=percMethylation(meth, rowids = TRUE)
-  perc.meth.cpg <- as.data.frame(perc.meth.cpg)
-  perc.meth.cpg$avg_treat <- rowMeans(perc.meth.cpg[,colnames(perc.meth.cpg) %in% treated], na.rm = TRUE)
-  perc.meth.cpg$avg_ctrl <- rowMeans(perc.meth.cpg[, colnames(perc.meth.cpg) %in% control], na.rm = TRUE)
-  perc.meth.cpg$coord <- rownames(perc.meth.cpg)
-  meth.bed2$coord <- paste0(meth.bed2$chr,".",meth.bed2$start,".",meth.bed2$end)
-  perc.meth.cpg <- merge(perc.meth.cpg, meth.bed2, by="coord")
-#saving a new version with the avg meth added in.
+```{r percent_methylation_cpg}
+
+perc.meth.cpg=percMethylation(meth, rowids = TRUE)
+perc.meth.cpg <- as.data.frame(perc.meth.cpg)
+perc.meth.cpg$avg_treat <- rowMeans(perc.meth.cpg[,colnames(perc.meth.cpg) %in% treated], na.rm = TRUE)
+perc.meth.cpg$avg_ctrl <- rowMeans(perc.meth.cpg[, colnames(perc.meth.cpg) %in% control], na.rm = TRUE)
+perc.meth.cpg$coord <- rownames(perc.meth.cpg)
+meth.bed2$coord <- paste0(meth.bed2$chr,".",meth.bed2$start,".",meth.bed2$end)
+perc.meth.cpg <- merge(perc.meth.cpg, meth.bed2, by="coord")
+
 # This is the final CpG file we want!!!! 
-saveRDS(perc.meth.cpg, file = paste0(base_folder, comparison_folder, filename_string,"perc.meth.cpg.all.rds"))
-}else{
-  perc.meth.cpg <- readRDS(paste0(base_folder, comparison_folder, filename_string,"perc.meth.cpg.all.rds"))
-  
-}
+write.table(
+  perc.meth.cpg,
+  file = paste0(params$out_path, "/", params$study,".perc.meth.cpg.all.tsv"),
+  sep="\t",
+  col.names=TRUE,
+  row.names=FALSE,
+  quote=FALSE
+)
 
 # This is the final DMC file we want!!!
 perc.meth.cpg.sig <- perc.meth.cpg[perc.meth.cpg$qvalue <=0.01 & abs(perc.meth.cpg$meth.diff) > 10,]
-saveRDS(perc.meth.cpg.sig, file = paste0(base_folder, comparison_folder, filename_string,"perc.meth.cpg.all.q0.01.methdiff.10.rds"))
+write.table(
+  perc.meth.cpg.sig,
+  file = paste0(params$out_path, "/", params$study,".perc.meth.cpg.all.q0.01.methdiff.10.tsv"),
+  sep="\t",
+  col.names=TRUE,
+  row.names=FALSE,
+  quote=FALSE
+)
 ```
 
 ## Percent Scatterplots for significant CpG sites all
 
-```{r, cache=FALSE}
+```{r, scatter_cpg}
 
 scatter_plot <- plot_ly(data = perc.meth.cpg.sig, x = ~avg_treat, y = ~avg_ctrl, text = ~coord, type = 'scatter', mode = 'markers', marker = list(size = 10))
 
