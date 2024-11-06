@@ -3,6 +3,7 @@ params:
   study: "Study Name"
   metadata_path: "path/to/metadata.csv"
   bismark_path: "path/to/bismark"
+  chromhmm_path: "path/to/chromhmm_segments.bed"
   out_path: "path/to/methylkit"
   assembly: "genome_assembly"
 title: |
@@ -31,6 +32,7 @@ rmarkdown::render(
     study = "JIRA_BDS-XXXX_12ABIC_EPI321_vs_CONTROL", 
     metadata_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/samplesheet_test_12ABIC.csv",
     bismark_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC",
+    chromhmm_path = "/home/tylerborrman/epic-methylseq_data/ChromHMM/hg38_genome_100_segments.bed,
     out_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit",
     assembly = "hg38"
   )
@@ -43,6 +45,7 @@ Rscript -e "rmarkdown::render(
     study = 'JIRA_BDS-XXXX_12ABIC_EPI321_vs_CONTROL',
     metadata_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC/samplesheet_test_12ABIC.csv',
     bismark_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC',
+    chromhmm_path = "/home/tylerborrman/epic-methylseq_data/ChromHMM/hg38_genome_100_segments.bed,
     out_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit',
     assembly = 'hg38'
   )
@@ -52,6 +55,7 @@ params:
   study: Study Name with JIRA ID prefix
   metadata_path: path to samplesheet used in nfcore/methylseq pipeline with additional condition column
   bismark_path: path to directory containing bismark coverage files (.deduplicated.bismark.cov)
+  chromhmm_path = path to ChromHMM annotation file
   out_path: path to directory to save methylkit output files
   assembly: genome assembly used in the analysis (e.g. hg38, mm10)
 -->
@@ -66,6 +70,8 @@ library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(readr)
+library(GenomicRanges)
+library(rtracklayer)
 ```
 
 # Dataset overview
@@ -225,6 +231,7 @@ write.table(
 )
 # This is the final DMR file we want!!!!
 perc.meth.tile.sig <- perc.meth.tile[perc.meth.tile$qvalue <=0.01 & abs(perc.meth.tile$meth.diff) > 10,]
+total_sig_dmrs <- nrow(perc.meth.tile.sig)
 
 write.table(
   perc.meth.tile.sig,
@@ -294,7 +301,7 @@ write.table(
 
 ## Percent Scatterplots for significant CpG sites all
 
-```{r, scatter_cpg}
+```{r scatter_cpg}
 
 scatter_plot <- plot_ly(data = perc.meth.cpg.sig, x = ~avg_treat, y = ~avg_ctrl, text = ~coord, type = 'scatter', mode = 'markers', marker = list(size = 10))
 
@@ -307,4 +314,66 @@ scatter_plot <- scatter_plot %>% layout(
 )
 # Print the plot
 scatter_plot
+```
+
+# DMR annotation
+
+## ChromHMM
+
+```{r chromhmm}
+
+# Load ChromHMM annotation
+chromhmm_gr <- rtracklayer::import(params$chromhmm_path)
+chromhmm_df <- as.data.frame(chromhmm_gr)
+chromhmm_df <- chromhmm_df[c("seqnames", "start", "end", "name")]
+colnames(chromhmm_df) <- c("ChromHMM.chr", "ChromHMM.start", "ChromHMM.end", "ChromHMM.state")
+
+# Generate Granges object from DMRs dataframe
+dmrs_df <- perc.meth.tile.sig[c("chr", "start", "end", "qvalue", "meth.diff")]
+colnames(dmrs_df) <- c("DMR.chr", "DMR.start", "DMR.end", "DMR.qvalue", "DMR.meth.diff")
+dmrs_gr <- makeGRangesFromDataFrame(
+  dmrs_df,
+  ignore.strand = TRUE,
+  keep.extra.columns = TRUE,
+  seqnames.field = "DMR.chr",
+  start.field = "DMR.start",
+  end.field = "DMR.end"
+)
+# Calculate overlaps between DMRs and ChromHMM annotations
+hits_obj <- findOverlaps(dmrs_gr, chromhmm_gr)
+
+dmrs_overlap <- dmrs_df[queryHits(hits_obj),]
+chromhmm_overlap <- chromhmm_df[subjectHits(hits_obj),]
+overlap_df <- cbind(dmrs_overlap, chromhmm_overlap)
+
+count_dmr_overlap <- length(unique(queryHits(hits_obj)))
+```
+
+`r count_dmr_overlap` / `r total_sig_dmrs` 
+(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %) of DMRs overlap with ChromHMM annotations.  
+Note: a single DMR may have multiple ChromHMM annotations.
+
+```{r chromhmm_table}
+# Display in table
+round_cols <- c("DMR.qvalue", "DMR.meth.diff")
+bp_cols <- c("DMR.start", "DMR.end", "ChromHMM.start", "ChromHMM.end")
+
+datatable(
+  overlap_df,
+  rownames = FALSE,
+  extensions = "Buttons",
+  options = list(
+    dom = "Bfrtip",
+    buttons = c("copy", "csv", "excel", "pdf", "print")
+  )
+) %>%
+formatSignif(
+  columns = round_cols,
+  digits = 4
+) %>%
+formatRound(
+  columns = bp_cols,
+  digits = 0,
+  interval = NULL
+)
 ```
