@@ -4,6 +4,8 @@ params:
   metadata_path: "path/to/metadata.csv"
   bismark_path: "path/to/bismark"
   chromhmm_path: "path/to/chromhmm_segments.bed"
+  ccre_path: "path/to/cCREs.bed"
+  blacklist_path: "path/to/blacklist.bed"
   out_path: "path/to/methylkit"
   assembly: "genome_assembly"
 title: |
@@ -32,7 +34,9 @@ rmarkdown::render(
     study = "JIRA_BDS-XXXX_12ABIC_EPI321_vs_CONTROL", 
     metadata_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/samplesheet_test_12ABIC.csv",
     bismark_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC",
-    chromhmm_path = "/home/tylerborrman/epic-methylseq_data/ChromHMM/hg38_genome_100_segments.bed,
+    chromhmm_path = "/home/tylerborrman/epic-methylseq_data/ChromHMM/hg38_genome_100_segments.bed",
+    ccre_path = "/home/tylerborrman/epic-methylseq_data/cCRE/GRCh38-cCREs.bed",
+    blacklist_path = "/home/tylerborrman/epic-methylseq_data/blacklist/hg38-blacklist.v2.bed",
     out_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit",
     assembly = "hg38"
   )
@@ -45,7 +49,9 @@ Rscript -e "rmarkdown::render(
     study = 'JIRA_BDS-XXXX_12ABIC_EPI321_vs_CONTROL',
     metadata_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC/samplesheet_test_12ABIC.csv',
     bismark_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC',
-    chromhmm_path = "/home/tylerborrman/epic-methylseq_data/ChromHMM/hg38_genome_100_segments.bed,
+    chromhmm_path = "/home/tylerborrman/epic-methylseq_data/ChromHMM/hg38_genome_100_segments.bed",
+    ccre_path = "/home/tylerborrman/epic-methylseq_data/cCRE/GRCh38-cCREs.bed",
+    blacklist_path = "/home/tylerborrman/epic-methylseq_data/blacklist/hg38-blacklist.v2.bed",
     out_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit',
     assembly = 'hg38'
   )
@@ -56,6 +62,8 @@ params:
   metadata_path: path to samplesheet used in nfcore/methylseq pipeline with additional condition column
   bismark_path: path to directory containing bismark coverage files (.deduplicated.bismark.cov)
   chromhmm_path = path to ChromHMM annotation file
+  ccre_path = path to ENCDOE cCRE annotation file
+  blacklist_path = path to ENCODE blacklist annotation file
   out_path: path to directory to save methylkit output files
   assembly: genome assembly used in the analysis (e.g. hg38, mm10)
 -->
@@ -171,7 +179,7 @@ myDiff.tile=calculateDiffMeth(meth.tile)
 # DMR no cut-off Tiling hyper/hypo methylated regions per chromosome
 ** In this section we will visualize the distribution of hypo/hyper-methylated bases/regions per chromosome.
 
-```{r hyper/hypo_methylation}
+```{r hyper/hypo_methylation, eval=FALSE}
 # diffMethPerChr(myDiff.tile,plot=TRUE,qvalue.cutoff=1, meth.cutoff=25)
 diffMethPerChr(myDiff.tile,plot=TRUE,qvalue.cutoff=1, meth.cutoff=21)
 
@@ -245,7 +253,7 @@ write.table(
 
 ## Percent Scatterplots for significant tiles all
 
-```{r scatter_tile}
+```{r scatter_tile, eval=FALSE}
 ## plotting only tiles with q <-0.05
 # perc.meth.tile.plot <- merge(perc.meth.tile, meth.promoters, by=c("chr","end"))
 # DT::datatable(perc.meth.tile.plot, extensions = 'Buttons',
@@ -301,7 +309,7 @@ write.table(
 
 ## Percent Scatterplots for significant CpG sites all
 
-```{r scatter_cpg}
+```{r scatter_cpg, eval=FALSE}
 
 scatter_plot <- plot_ly(data = perc.meth.cpg.sig, x = ~avg_treat, y = ~avg_ctrl, text = ~coord, type = 'scatter', mode = 'markers', marker = list(size = 10))
 
@@ -317,6 +325,18 @@ scatter_plot
 ```
 
 # DMR annotation
+```{r dmr_annotation}
+# Generate Granges object from DMRs dataframe
+dmrs_df <- perc.meth.tile.sig[c("chr", "start", "end", "qvalue", "meth.diff")]
+dmrs_gr <- makeGRangesFromDataFrame(
+  dmrs_df,
+  ignore.strand = TRUE,
+  keep.extra.columns = TRUE,
+  seqnames.field = "chr",
+  start.field = "start",
+  end.field = "end"
+)
+```
 
 ## ChromHMM
 
@@ -325,28 +345,25 @@ scatter_plot
 # Load ChromHMM annotation
 chromhmm_gr <- rtracklayer::import(params$chromhmm_path)
 chromhmm_df <- as.data.frame(chromhmm_gr)
-chromhmm_df <- chromhmm_df[c("seqnames", "start", "end", "name")]
-colnames(chromhmm_df) <- c("ChromHMM.chr", "ChromHMM.start", "ChromHMM.end", "ChromHMM.state")
+chromhmm_df <- chromhmm_df["name"]
 
-# Generate Granges object from DMRs dataframe
-dmrs_df <- perc.meth.tile.sig[c("chr", "start", "end", "qvalue", "meth.diff")]
-colnames(dmrs_df) <- c("DMR.chr", "DMR.start", "DMR.end", "DMR.qvalue", "DMR.meth.diff")
-dmrs_gr <- makeGRangesFromDataFrame(
-  dmrs_df,
-  ignore.strand = TRUE,
-  keep.extra.columns = TRUE,
-  seqnames.field = "DMR.chr",
-  start.field = "DMR.start",
-  end.field = "DMR.end"
-)
 # Calculate overlaps between DMRs and ChromHMM annotations
 hits_obj <- findOverlaps(dmrs_gr, chromhmm_gr)
 
 dmrs_overlap <- dmrs_df[queryHits(hits_obj),]
 chromhmm_overlap <- chromhmm_df[subjectHits(hits_obj),]
-overlap_df <- cbind(dmrs_overlap, chromhmm_overlap)
+ChromHMM.state <- chromhmm_overlap
+overlap_df <- cbind(dmrs_overlap, ChromHMM.state)
 
 count_dmr_overlap <- length(unique(queryHits(hits_obj)))
+```
+
+```{asis, echo = basename(params$chromhmm_path) == "hg38_genome_100_segments.bed"}
+ChromHMM annotations were sourced from https://github.com/ernstlab/full_stack_ChromHMM_annotations
+```
+
+```{asis, echo = basename(params$chromhmm_path) == "mm10_100_segments_segments.bed"}
+ChromHMM annotations were sourced from https://github.com/ernstlab/mouse_fullStack_annotations
 ```
 
 `r count_dmr_overlap` / `r total_sig_dmrs` 
@@ -355,8 +372,139 @@ Note: a single DMR may have multiple ChromHMM annotations.
 
 ```{r chromhmm_table}
 # Display in table
-round_cols <- c("DMR.qvalue", "DMR.meth.diff")
-bp_cols <- c("DMR.start", "DMR.end", "ChromHMM.start", "ChromHMM.end")
+round_cols <- c("qvalue", "meth.diff")
+bp_cols <- c("start", "end")
+
+datatable(
+  overlap_df,
+  rownames = FALSE,
+  extensions = "Buttons",
+  options = list(
+    dom = "Bfrtip",
+    buttons = c("copy", "csv", "excel", "pdf", "print")
+  )
+) %>%
+formatSignif(
+  columns = round_cols,
+  digits = 4
+) %>%
+formatRound(
+  columns = bp_cols,
+  digits = 0,
+  interval = NULL
+)
+```
+
+## ENCODE cCRE
+
+```{r ccre}
+
+# Load cCRE annotation
+ccre_df <- read.table(
+  params$ccre_path,
+  header = FALSE,
+  sep = "\t",
+  col.names = c("chr", "start", "end", "accession_old", "accession", "class")
+)
+# Make starts 1-based
+# Not clear in ENCODE documenattion if cCRE starts are 0-based or 1-based
+# but since it is a BED file, we will assume it is 0-based
+ccre_df$start <- ccre_df$start + 1
+
+ccre_gr <- makeGRangesFromDataFrame(
+  ccre_df,
+  ignore.strand = TRUE,
+  keep.extra.columns = TRUE,
+  seqnames.field = "chr",
+  start.field = "start",
+  end.field = "end",
+)
+
+# Calculate overlaps between DMRs and cCRE annotations
+hits_obj <- findOverlaps(dmrs_gr, ccre_gr)
+
+dmrs_overlap <- dmrs_df[queryHits(hits_obj),]
+ccre_overlap <- ccre_df[subjectHits(hits_obj),]
+overlap_df <- cbind(dmrs_overlap, ccre_overlap)
+
+count_dmr_overlap <- length(unique(queryHits(hits_obj)))
+```
+
+```{asis, echo = basename(params$ccre_path) == "GRCh38-cCREs.bed"}
+cCRE (candidate cis-regulatory element) annotations were sourced from 
+https://screen.encodeproject.org/ all human cCREs (hg38) Registry of cCREs V3
+```
+
+```{asis, echo = basename(params$ccre_path) == "mm10-cCREs.bed"}
+cCRE (candidate cis-regulatory element) annotations were sourced from 
+https://screen.encodeproject.org/ all mouse cCREs (mm10) Registry of cCREs V3
+```
+
+`r count_dmr_overlap` / `r total_sig_dmrs` 
+(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %) of DMRs overlap with cCRE annotations.  
+Note: a single DMR may have multiple cCRE annotations.
+
+```{r ccre_table}
+# Display in table
+round_cols <- c("qvalue", "meth.diff")
+bp_cols <- c("start", "end")
+
+datatable(
+  overlap_df,
+  rownames = FALSE,
+  extensions = "Buttons",
+  options = list(
+    dom = "Bfrtip",
+    buttons = c("copy", "csv", "excel", "pdf", "print")
+  )
+) %>%
+formatSignif(
+  columns = round_cols,
+  digits = 4
+) %>%
+formatRound(
+  columns = bp_cols,
+  digits = 0,
+  interval = NULL
+)
+```
+
+## ENCODE Blacklist
+
+```{r blacklist}
+
+# Load ChromHMM annotation
+blacklist_gr <- rtracklayer::import(params$blacklist_path)
+blacklist_df <- as.data.frame(blacklist_gr)
+blacklist_df <- blacklist_df["name"]
+
+# Calculate overlaps between DMRs and blacklist annotations
+hits_obj <- findOverlaps(dmrs_gr, blacklist_gr)
+
+dmrs_overlap <- dmrs_df[queryHits(hits_obj),]
+blacklist_overlap <- blacklist_df[subjectHits(hits_obj),]
+blacklist.state <- blacklist_overlap
+overlap_df <- cbind(dmrs_overlap, blacklist.state)
+
+count_dmr_overlap <- length(unique(queryHits(hits_obj)))
+```
+
+```{asis, echo = basename(params$blacklist_path) == "hg38-blacklist.v2.bed"}
+blacklist annotations were sourced from https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz
+```
+
+```{asis, echo = basename(params$blacklist_path) == "mm10-blacklist.v2.bed"}
+ChromHMM annotations were sourced from https://github.com/Boyle-Lab/Blacklist/blob/master/lists/mm10-blacklist.v2.bed.gz
+```
+
+`r count_dmr_overlap` / `r total_sig_dmrs` 
+(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %) of DMRs overlap with blacklist annotations.  
+Note: a single DMR may have multiple blacklist annotations.
+
+```{r blacklist_table}
+# Display in table
+round_cols <- c("qvalue", "meth.diff")
+bp_cols <- c("start", "end")
 
 datatable(
   overlap_df,
