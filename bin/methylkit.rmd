@@ -238,7 +238,7 @@ write.table(
   quote=FALSE
 )
 # This is the final DMR file we want!!!!
-perc.meth.tile.sig <- perc.meth.tile[perc.meth.tile$qvalue <=0.01 & abs(perc.meth.tile$meth.diff) > 10,]
+perc.meth.tile.sig <- perc.meth.tile[perc.meth.tile$qvalue < 0.01 & abs(perc.meth.tile$meth.diff) > 10,]
 total_sig_dmrs <- nrow(perc.meth.tile.sig)
 
 write.table(
@@ -251,27 +251,125 @@ write.table(
 )
 ```
 
-## Percent Scatterplots for significant tiles all
+```{r volcano_plot, fig.height=10, fig.width=10}
 
-```{r scatter_tile, eval=FALSE}
-## plotting only tiles with q <-0.05
-# perc.meth.tile.plot <- merge(perc.meth.tile, meth.promoters, by=c("chr","end"))
-# DT::datatable(perc.meth.tile.plot, extensions = 'Buttons',
-#   options = list(
-#     dom = 'Bfrtip',
-#     buttons = c('copy', 'csv', 'excel', 'pdf', 'print')), caption =  paste0("Percent methylation at significant tiles for ",project, " q < 0.05"))
-scatter_plot <- plot_ly(data = perc.meth.tile.sig, x = ~avg_treat, y = ~avg_ctrl, text = ~coord, type = 'scatter', mode = 'markers', marker = list(size = 10))
-
-# Customize layout
-scatter_plot <- scatter_plot %>% layout(
-  xaxis = list(title = "Average Treatment"),
-  yaxis = list(title = "Average Control"),
-  hovermode = "closest",
-  title = list(text = paste0("Scatter Plot of percent methylation at significant tiles sites for q < 0.01 and abs meth diff > 10"), font = list(size = 10)), font = list(size = 11))
+# Label significance groups
+perc.meth.tile$sig.group <- "NS"
+perc.meth.tile$sig.group[perc.meth.tile$qvalue < 0.01 & abs(perc.meth.tile$meth.diff) <= 10] <- "qvalue"
+perc.meth.tile$sig.group[perc.meth.tile$qvalue >= 0.01 & abs(perc.meth.tile$meth.diff) > 10] <- "meth.diff"
+perc.meth.tile$sig.group[perc.meth.tile$qvalue < 0.01 & abs(perc.meth.tile$meth.diff) > 10] <- "qvalue and meth.diff"
 
 
-# Print the plot
-scatter_plot
+# Borrowing EnhancedVolcano theme
+th <- theme_bw(base_size = 24) +
+  theme(
+    legend.background = element_rect(),
+
+    # title, subtitle, and caption
+    plot.title = element_text(
+      angle = 0,
+      size = 18,
+      face = 'bold',
+      vjust = 1),
+    plot.subtitle = element_text(
+        angle = 0,
+        size = 14,
+        face = 'plain',
+        vjust = 1),
+    plot.caption = element_text(
+      angle = 0,
+      size = 14,
+      face = 'plain',
+      vjust = 1),
+
+    # axis text
+    axis.text.x = element_text(
+      angle = 0,
+      size = 18,
+      vjust = 1),
+    axis.text.y = element_text(
+      angle = 0,
+      size = 18,
+      vjust = 0.5),
+    axis.title = element_text(
+      size = 18),
+    axis.line = element_line(
+      size = 0.8,
+      colour = 'black'),
+    panel.border = element_blank(),
+    panel.background = element_blank(),
+
+    # legend
+    legend.position = 'top',
+    legend.key = element_blank(),
+    legend.key.size = unit(0.5, 'cm'),
+    legend.text = element_text(
+      size = 14),
+    title = element_text(
+      size = 14),
+    legend.title = element_blank()
+  )
+
+# Plot Volcano
+ggplot(
+  data = perc.meth.tile,
+  aes(
+    x = meth.diff,
+    y = -log10(qvalue)
+  ) 
+  ) +
+  geom_point(
+    aes(
+      color = sig.group,
+      alpha = 0.6
+    ),
+    show.legend = c(
+      size = FALSE,
+      alpha = FALSE
+    ),
+    size = 2
+  ) +
+  geom_vline(
+    xintercept = c(-10, 10),
+    col = "black",
+    linewidth = 0.4,
+    linetype = "longdash"
+  ) +
+  geom_hline(
+    yintercept = -log10(0.01),
+    col = "black",
+    linewidth = 0.4,
+    linetype = "longdash"
+  ) +
+  #ylim(0, 50) + 
+  scale_color_manual(
+    values=c(
+      "NS" = "grey30",
+      "qvalue" = "royalblue",
+      "meth.diff" = "forestgreen",
+      "qvalue and meth.diff" = "red2"
+    ),
+    breaks=c(
+      "NS",
+      "qvalue",
+      "meth.diff",
+      "qvalue and meth.diff"
+    )
+  ) +
+  th +
+  labs(
+    x = "% methylation change",
+    y = "-log10(qvalue)",
+    title = "EPI321 vs CONTROL total DMRs",
+    subtitle = "Thresholds: qvalue=0.01, meth.diff=10"
+  ) +
+  guides(
+    color = guide_legend(
+      override.aes = list(
+        size = 5.0
+      )
+    )
+  )
 ```
 
 
@@ -307,22 +405,6 @@ write.table(
 )
 ```
 
-## Percent Scatterplots for significant CpG sites all
-
-```{r scatter_cpg, eval=FALSE}
-
-scatter_plot <- plot_ly(data = perc.meth.cpg.sig, x = ~avg_treat, y = ~avg_ctrl, text = ~coord, type = 'scatter', mode = 'markers', marker = list(size = 10))
-
-# Customize layout
-scatter_plot <- scatter_plot %>% layout(
-  xaxis = list(title = "Average Treatment"),
-  yaxis = list(title = "Average Control"),
-  hovermode = "closest",
-  title = list(text = paste0("Scatter Plot of percent methylation at significant CpG sites for q < 0.01 and abs meth diff > 10"), font = list(size = 11))
-)
-# Print the plot
-scatter_plot
-```
 
 # DMR annotation
 ```{r dmr_annotation}
@@ -366,8 +448,8 @@ ChromHMM annotations were sourced from https://github.com/ernstlab/full_stack_Ch
 ChromHMM annotations were sourced from https://github.com/ernstlab/mouse_fullStack_annotations
 ```
 
-`r count_dmr_overlap` / `r total_sig_dmrs` 
-(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %) of DMRs overlap with ChromHMM annotations.  
+**`r count_dmr_overlap` / `r total_sig_dmrs`** 
+**(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with ChromHMM annotations.  
 Note: a single DMR may have multiple ChromHMM annotations.
 
 ```{r chromhmm_table}
@@ -440,8 +522,8 @@ cCRE (candidate cis-regulatory element) annotations were sourced from
 https://screen.encodeproject.org/ all mouse cCREs (mm10) Registry of cCREs V3
 ```
 
-`r count_dmr_overlap` / `r total_sig_dmrs` 
-(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %) of DMRs overlap with cCRE annotations.  
+**`r count_dmr_overlap` / `r total_sig_dmrs`** 
+**(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with cCRE annotations.  
 Note: a single DMR may have multiple cCRE annotations.
 
 ```{r ccre_table}
@@ -497,8 +579,8 @@ blacklist annotations were sourced from https://github.com/Boyle-Lab/Blacklist/b
 ChromHMM annotations were sourced from https://github.com/Boyle-Lab/Blacklist/blob/master/lists/mm10-blacklist.v2.bed.gz
 ```
 
-`r count_dmr_overlap` / `r total_sig_dmrs` 
-(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %) of DMRs overlap with blacklist annotations.  
+**`r count_dmr_overlap` / `r total_sig_dmrs`** 
+**(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with blacklist annotations.  
 Note: a single DMR may have multiple blacklist annotations.
 
 ```{r blacklist_table}
