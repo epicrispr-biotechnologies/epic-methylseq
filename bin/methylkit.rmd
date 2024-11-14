@@ -145,7 +145,6 @@ getCoverageStats(myobj[[1]],plot=TRUE,both.strands=FALSE) # check coverage stats
 ```
 
 # Comparative Analysis
-## CpG analysis
 ```{r comparative analysis}
 # Comparative analysis
 #  Merging all samples into one file. This is needed as precursor for dmc analyses  
@@ -156,11 +155,8 @@ PCASamples(meth, adj.lim=c(0.5,0.5))
 ```
 
 # PCA
-PCA analysis on % methylation matrix *X* where *X(i,j)*
-represents the % methylation of CpG *j* in sample *i*.
 
-## Biplot
-```{r pca, fig.height=9, fig.width=11}
+```{r pca, echo=FALSE, message=FALSE}
 # Adjust the range of a vector "x" by "i" proportion of the range of x
 # 
 # @param x a vector of value
@@ -428,9 +424,7 @@ applyTbxByChunk<-function(tbxFile,chunk.size=1e6,dir,filename,
   x.pr = prcomp(t(x),scale.=scale,center=center)
  
   if (screeplot){
-    i=5;screeplot(x.pr, type="barplot", 
-                  main=paste(context,"methylation PCA Screeplot"), 
-                  col = rainbow(i)[i])
+    .screePlot(x.pr)
   }
   else {
     #loads = loadings(x.pr)
@@ -449,12 +443,34 @@ applyTbxByChunk<-function(tbxFile,chunk.size=1e6,dir,filename,
                 xlim= c(min(d$PC1, d$PC2), max(d$PC1, d$PC2)),
                 ylim= c(min(d$PC1, d$PC2), max(d$PC1, d$PC2))
                 ) + 
-      geom_text(aes(label=rownames(d)), hjust=0, vjust=0, show.legend=FALSE)
+      geom_text(aes(label=rownames(d)), hjust=0, vjust=0, show.legend=FALSE) + 
+      theme(
+        axis.title=element_text(size=18),
+        axis.text=element_text(size=12),
+        legend.title=element_text(size=18),
+        legend.text=element_text(size=12)
+      )
     print(p)
   }
   if(obj.return){  return((x.pr))}
 }
 
+.screePlot <- function(pca){
+  # the contribution to the total variance for each component
+  percentVar <- pca$sdev^2 / sum(pca$sdev^2)
+  PC_names <- paste0("PC", 1:length(percentVar))
+  # subset to first 9 components if 10 or more
+  if (length(percentVar) > 9) {
+    percentVar <- percentVar[1:9]
+    PC_names <- PC_names[1:9]
+  }
+  scree_df <- data.frame(PC_names, percentVar)
+  # Plot the scree plot
+  p <- ggplot(scree_df, aes(x = PC_names, y = percentVar)) +
+    geom_bar(stat = "identity", fill = "#1c3f74") +
+    labs(x = "Principal component", y = "Proportion of variance explained")
+  print(p)
+}
 
 #' Principal Components Analysis of Methylation data
 #' 
@@ -529,7 +545,8 @@ applyTbxByChunk<-function(tbxFile,chunk.size=1e6,dir,filename,
 #' @export
 #' @docType methods
 #' @rdname PCASamples-methods
-setGeneric("myPCASamples", function(.Object, screeplot=FALSE, 
+invisible(
+  setGeneric("myPCASamples", function(.Object, screeplot=FALSE, 
                                   adj.lim=c(0.0004,0.1),
                                   scale=TRUE,center=TRUE,comp=c(1,2),
                                   transpose=TRUE,
@@ -537,7 +554,7 @@ setGeneric("myPCASamples", function(.Object, screeplot=FALSE,
                                   filterByQuantile=TRUE,obj.return=FALSE,
                                   chunk.size=1e6) 
           standardGeneric("myPCASamples"))
-
+)
 #' @rdname PCASamples-methods
 #' @aliases PCASamples,methylBase-method
 setMethod("myPCASamples", "methylBase",
@@ -639,18 +656,26 @@ setMethod("myPCASamples", "methylBaseDB",
   
 }      
 )
-
-# Run my version of PCA analysis with prettier plotting
-myPCASamples(meth)
-
 ```
 
+## CpG
+PCA analysis on % methylation matrix ***X*** where ***X ( i , j )***
+represents the % methylation of CpG ***j*** in sample ***i***.
 
-## Tiling windows analysis
-For some situations, it might be desirable to summarize methylation information over tiling windows rather than doing base-pair resolution analysis.
-For example, here we tile the genome with windows of 100bp and step-size 100bp and summarize the methylation information on those tiles.
-This returns a methylRawList object which can be fed into unite and calculateDiffMeth functions consecutively to get differentially methylated regions.
-The tilling function adds up C and T counts from each covered cytosine and returns a total C and T count for each tile.
+### Biplot
+
+```{r pca_biplot_cpg, fig.height=9, fig.width=11}
+# Run my version of PCA analysis with prettier plotting
+myPCASamples(meth)
+```
+
+### Scree plot
+
+```{r pca_screeplot_cpg, fig.height=9, fig.width=11}
+
+myPCASamples(meth, screeplot=TRUE)
+```
+
 
 ```{r tiling_window_analysis, echo=FALSE}
 
@@ -662,8 +687,30 @@ tile.obj=tileMethylCounts(myobj,win.size=100,step.size=100,cov.bases=5)
 
 # In this version of the code we are requiring all samples to have a methylation site for it to be included in the comparative analyses.
 meth.tile=methylKit::unite(tile.obj, destrand=FALSE)
+```
 
+## Tile
+PCA analysis on % methylation matrix ***X*** where ***X ( i , j )***
+represents the % methylation of tile ***j*** in sample ***i***.
+
+Tiles are 100 bp windows with a minimum of 5 CpGs.
+
+### Biplot
+
+```{r pca_biplot_tile, fig.height=9, fig.width=11}
 PCASamples(meth.tile)
+myPCASamples(meth.tile)
+
+```
+
+### Screeplot
+
+```{r pca_screeplot_tile, fig.height=9, fig.width=11}
+PCASamples(meth.tile, screeplot=TRUE)
+myPCASamples(meth.tile, screeplot=TRUE)
+```
+
+```{r}
 # find DMRs 
 myDiff.tile=calculateDiffMeth(meth.tile)
 ```
