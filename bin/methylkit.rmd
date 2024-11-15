@@ -80,6 +80,8 @@ library(tidyr)
 library(readr)
 library(GenomicRanges)
 library(rtracklayer)
+library(pheatmap)
+library(RColorBrewer)
 ```
 
 # Dataset overview
@@ -423,39 +425,35 @@ applyTbxByChunk<-function(tbxFile,chunk.size=1e6,dir,filename,
 
   x.pr = prcomp(t(x),scale.=scale,center=center)
  
-  if (screeplot){
-    .screePlot(x.pr)
-  }
-  else {
-    #loads = loadings(x.pr)
-    #loads = x.pr$rotation
-    condition = ifelse(treatment == 1, "EPI321", "CONTROL")
-    sample.ids = sample.ids
-
-    d <- data.frame(
-      PC1=x.pr$x[,1],
-      PC2=x.pr$x[,2],
-      condition=condition
+  #loads = loadings(x.pr)
+  #loads = x.pr$rotation
+  condition = ifelse(treatment == 1, "EPI321", "CONTROL")
+  sample.ids = sample.ids
+  d <- data.frame(
+    PC1=x.pr$x[,1],
+    PC2=x.pr$x[,2],
+    condition=condition
+  )
+  p <- ggplot(data=d, aes(x=PC1, y=PC2, color=condition)) +
+    geom_point(size=3) + 
+    coord_fixed(ratio=1,
+              xlim= c(min(d$PC1, d$PC2), max(d$PC1, d$PC2)),
+              ylim= c(min(d$PC1, d$PC2), max(d$PC1, d$PC2))
+              ) + 
+    geom_text(aes(label=rownames(d)), hjust=0, vjust=0, show.legend=FALSE) + 
+    theme(
+      axis.title=element_text(size=18),
+      axis.text=element_text(size=12),
+      legend.title=element_text(size=18),
+      legend.text=element_text(size=12)
     )
-    p <- ggplot(data=d, aes(x=PC1, y=PC2, color=condition)) +
-      geom_point(size=3) + 
-      coord_fixed(ratio=1,
-                xlim= c(min(d$PC1, d$PC2), max(d$PC1, d$PC2)),
-                ylim= c(min(d$PC1, d$PC2), max(d$PC1, d$PC2))
-                ) + 
-      geom_text(aes(label=rownames(d)), hjust=0, vjust=0, show.legend=FALSE) + 
-      theme(
-        axis.title=element_text(size=18),
-        axis.text=element_text(size=12),
-        legend.title=element_text(size=18),
-        legend.text=element_text(size=12)
-      )
-    print(p)
-  }
+  print(p)
+  
   if(obj.return){  return((x.pr))}
 }
 
-.screePlot <- function(pca){
+.screePlot <- function(mat){
+  pca = prcomp(t(mat),scale.=TRUE,center=TRUE)
   # the contribution to the total variance for each component
   percentVar <- pca$sdev^2 / sum(pca$sdev^2)
   PC_names <- paste0("PC", 1:length(percentVar))
@@ -468,8 +466,29 @@ applyTbxByChunk<-function(tbxFile,chunk.size=1e6,dir,filename,
   # Plot the scree plot
   p <- ggplot(scree_df, aes(x = PC_names, y = percentVar)) +
     geom_bar(stat = "identity", fill = "#1c3f74") +
-    labs(x = "Principal component", y = "Proportion of variance explained")
+    labs(x = "Principal component", y = "Proportion of variance explained") + 
+    theme(
+      axis.title=element_text(size=18),
+      axis.text=element_text(size=12),
+    )
   print(p)
+}
+
+.distancePlot <- function(mat, metadata) {
+  sampleDists <- dist(t(mat))
+  sampleDistMatrix <- as.matrix(sampleDists)
+  colors <- colorRampPalette(rev(brewer.pal(9, "Blues")) )(255)
+
+  df <- metadata[,c("condition", "sample")]
+  pheatmap(
+    sampleDistMatrix,
+    clustering_distance_rows=sampleDists,
+    clustering_distance_cols=sampleDists,
+    col=colors,
+    annotation_col=df,
+    cluster_rows=TRUE,
+    cluster_cols=TRUE
+  )
 }
 
 #' Principal Components Analysis of Methylation data
@@ -653,34 +672,36 @@ setMethod("myPCASamples", "methylBaseDB",
              context=.Object@context,
              scale=scale,center=center,  obj.return=obj.return)
   }
-  
-}      
+
+  return(meth.mat)   
+}    
 )
 ```
 
 ## CpG
-PCA analysis on % methylation matrix ***X*** where ***X ( i , j )***
-represents the % methylation of CpG ***j*** in sample ***i***.
+PCA analysis on % methylation matrix **X** where **X ( i , j )**
+represents the % methylation of CpG **j** in sample **i**.
 
 ### Biplot
 
 ```{r pca_biplot_cpg, fig.height=9, fig.width=11}
 # Run my version of PCA analysis with prettier plotting
-myPCASamples(meth)
+meth.cpg.mat <- myPCASamples(meth)
 ```
 
 ### Scree plot
 
 ```{r pca_screeplot_cpg, fig.height=9, fig.width=11}
 
-myPCASamples(meth, screeplot=TRUE)
+.screePlot(meth.cpg.mat)
+
 ```
 
 
 ```{r tiling_window_analysis, echo=FALSE}
 
 # converting my.obj to tile object for sliding 100 bp windows minimum coverage of 5 CpGs 
-tile.obj=tileMethylCounts(myobj,win.size=100,step.size=100,cov.bases=5)
+tile.obj=invisible(tileMethylCounts(myobj,win.size=100,step.size=100,cov.bases=5))
 
 # in this version of the code we only required 2 out of the 3 total merged samples (one sample per patient source) to contain a methylation site for it to be included in the comparative analyses if min.per.group is not specified default is all samples must have a specific CpG site or meth tile covered to include it. 
 # meth.tile=methylKit::unite(tile.obj, destrand=FALSE, min.per.group = 2L) 
@@ -690,25 +711,43 @@ meth.tile=methylKit::unite(tile.obj, destrand=FALSE)
 ```
 
 ## Tile
-PCA analysis on % methylation matrix ***X*** where ***X ( i , j )***
-represents the % methylation of tile ***j*** in sample ***i***.
+PCA analysis on % methylation matrix **X** where **X(i,j)**
+represents the % methylation of tile **j** in sample **i**.
 
 Tiles are 100 bp windows with a minimum of 5 CpGs.
 
 ### Biplot
 
 ```{r pca_biplot_tile, fig.height=9, fig.width=11}
-PCASamples(meth.tile)
-myPCASamples(meth.tile)
-
+# Plot PCA biplot
+meth.tile.mat <- myPCASamples(meth.tile)
 ```
 
 ### Screeplot
 
 ```{r pca_screeplot_tile, fig.height=9, fig.width=11}
-PCASamples(meth.tile, screeplot=TRUE)
-myPCASamples(meth.tile, screeplot=TRUE)
+# Plot PCA screeplot
+.screePlot(meth.tile.mat)
 ```
+
+# Heatmap of the sample-to-sample distances
+
+## CpG
+Euclidean distances between samples for % methylation of CpGs.
+
+```{r, fig.height=9, fig.width=11}
+# Plot distance heatmap
+.distancePlot(meth.cpg.mat, metadata)
+```
+
+## Tile
+Euclidean distances between samples for % methylation of tiles.
+
+```{r, fig.height=9, fig.width=11}
+# Plot distance heatmap
+.distancePlot(meth.tile.mat, metadata)
+```
+
 
 ```{r}
 # find DMRs 

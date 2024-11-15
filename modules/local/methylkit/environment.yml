@@ -18,3 +18,4 @@ dependencies:
   - r-readr=2.1.5
   - r-rmarkdown=2.28
   - r-rmdformats=1.0.4
+  - r-pheatmap=1.0.12
