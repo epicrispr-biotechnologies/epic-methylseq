@@ -84,23 +84,15 @@ library(pheatmap)
 library(RColorBrewer)
 ```
 
-# Dataset overview
-
-```{r dataset overview}
+```{r read_metadata}
 # Load metadata
 metadata <- read_csv(params$metadata_path)
 metadata <- metadata[c("sample", "condition")]
-datatable(metadata)
 metadata <- as.data.frame(metadata)
 rownames(metadata) <- metadata$sample
-condition <- metadata$condition
-names(condition) <- metadata$sample
-
 ```
 
-# Descriptive statistics
-
-```{r descriptive statistics}
+```{r read_cov_files}
 
 # Function to find files with a given prefix
 find_files_with_prefix <- function(prefix, files) {
@@ -130,7 +122,7 @@ control <- metadata$sample[metadata$condition == "CONTROL"]
 # but the bismark coverage files have 6 cols and the code for the methylKit methRead function expects 6 cols:
 # chr, start, end, % meth, count methylated, count unmethylated
 
-myobj=methRead(cov_files,
+myobj=invisible(methRead(cov_files,
                 sample.id=as.list(metadata$sample),
                 pipeline="bismarkCoverage",
                 assembly=params$assembly,
@@ -139,21 +131,193 @@ myobj=methRead(cov_files,
                 dbtype = "tabix",
                 dbdir = "methylDB",
                 header = FALSE
-)
-
-# Descriptive statistics on samples
-getMethylationStats(myobj[[1]],plot=TRUE,both.strands=FALSE) # check methylation stats on first sample
-getCoverageStats(myobj[[1]],plot=TRUE,both.strands=FALSE) # check coverage stats on first  sample 
+))
+# Merging all samples into one file. This is needed as precursor for dmc analyses  
+meth=invisible(methylKit::unite(myobj, destrand=FALSE))
 ```
 
-# Comparative Analysis
-```{r comparative analysis}
-# Comparative analysis
-#  Merging all samples into one file. This is needed as precursor for dmc analyses  
-meth=methylKit::unite(myobj, destrand=FALSE)
-clusterSamples(meth, dist="correlation", method="ward.D2", plot=TRUE)
-PCASamples(meth, screeplot=TRUE)
-PCASamples(meth, adj.lim=c(0.5,0.5))
+```{r tiling_window_analysis, echo=FALSE}
+
+# converting my.obj to tile object for sliding 100 bp windows minimum coverage of 5 CpGs 
+invisible(capture.output({tile.obj = tileMethylCounts(myobj,win.size=100,step.size=100,cov.bases=5)}))
+
+# in this version of the code we only required 2 out of the 3 total merged samples (one sample per patient source) to contain a methylation site for it to be included in the comparative analyses if min.per.group is not specified default is all samples must have a specific CpG site or meth tile covered to include it. 
+# meth.tile=methylKit::unite(tile.obj, destrand=FALSE, min.per.group = 2L) 
+
+# In this version of the code we are requiring all samples to have a methylation site for it to be included in the comparative analyses.
+meth.tile=invisible(methylKit::unite(tile.obj, destrand=FALSE))
+```
+
+# Dataset overview
+
+```{r dataset_overview}
+
+hg38_names <- c(
+  "hg38",
+  "GRCh38",
+  "Homo_sapiens.GRCh38.dna.primary_assembly.109.cas_molecule", 
+  "Homo_sapiens.GRCh38.dna.primary_assembly.109.cas_molecule.fa"
+)
+mm10_names <- c(
+  "mm10",
+  "GRCm38",
+  "Mus_musculus.GRCm38.dna.primary_assembly.102.cas_molecule", 
+  "Mus_musculus.GRCm38.dna.primary_assembly.102.cas_molecule.fa"
+)
+macfas5_names <- c(
+  "macFas5",
+  "Macaca_fascicularis_5.0",
+  "Macaca_fascicularis.Macaca_fascicularis_5.0.dna.toplevel.102.cas_molecule", 
+  "Macaca_fascicularis.Macaca_fascicularis_5.0.dna.toplevel.102.cas_molecule.fa"
+)
+
+# All CpG and candidate DMR (tile) counts were calculated using
+# *.cas_molecule.fa reference genomes 
+
+if (params$assembly %in% hg38_names) {
+  genome <- "Homo_sapiens.GRCh38.dna.primary_assembly.109.cas_molecule.fa"
+  genome_cpg_cnt <- 58974418
+  genome_tile_cnt <- 3176105
+} else if (params$assembly %in% mm10_names) {
+  genome <- "Mus_musculus.GRCm38.dna.primary_assembly.102.cas_molecule.fa"
+  genome_cpg_cnt <- 43816302
+  genome_tile_cnt <- 1960510
+} else if (params$assembly %in% macfas5_names) {
+  genome <- "Macaca_fascicularis.Macaca_fascicularis_5.0.dna.toplevel.102.cas_molecule.fa"
+  genome_cpg_cnt <- 58009056
+  genome_tile_cnt <- 3164794
+} else {
+  stop("Unknown reference genome assembly")
+}
+```
+
+## Reference genome overview
+Reference genome: ``r genome``
+
+```{r genome_table}
+
+genome_table <- data.frame(
+  c(
+    "Total CpGs",
+    "Total tiles"
+  ),
+  c(
+    genome_cpg_cnt,
+    genome_tile_cnt
+  )
+)
+
+colnames(genome_table) <- c("key", "value")
+
+datatable(
+  genome_table,
+  rownames=FALSE,
+  colnames=NULL,
+  caption=htmltools::tags$caption(
+    style = 'caption-side: bottom;',
+    "Tile = 100 bp genome window with at least 5 CpGs."
+  ),
+  options=list(
+    searching=FALSE,
+    paging=FALSE,
+    lengthChange=FALSE
+  )
+) %>% formatRound(
+  columns = "value",
+  digits = 0
+)
+
+```
+
+## Sample overview
+
+```{r sample_table}
+sample_cpg_cnts <- sapply(myobj, function(x) x@num.records)
+sample_tile_cnts <- sapply(tile.obj, function(x) x@num.records)
+
+percent_cpg <- (sample_cpg_cnts / genome_cpg_cnt) * 100
+percent_tile <- (sample_tile_cnts / genome_tile_cnt) * 100
+
+metadata <- cbind(
+  metadata,
+  sample_cpg_cnts,
+  percent_cpg,
+  sample_tile_cnts,
+  percent_tile
+)
+
+round_cols <- c(
+  "percent_cpg",
+  "percent_tile"
+)
+
+int_cols <- c(
+  "sample_cpg_cnts",
+  "sample_tile_cnts"
+)
+
+datatable(
+  metadata,
+  rownames = FALSE,
+  colnames = c(
+    "sample",
+    "condition",
+    "10X CpG",
+    "10X CpG %",
+    "10X Tile",
+    "10X Tile %"
+  ),
+  caption= htmltools::tags$caption(
+    style = 'caption-side: bottom;',  
+    "10X CpG = Number of CpGs with at least 10X coverage.", htmltools::tags$br(),  
+    "10X CpG % = Percentage of CpGs with at least 10X coverage of total CpGs.", htmltools::tags$br(), 
+    "10X Tile = Number of tiles with at least 5 CpGs each with at least 10X coverage.", htmltools::tags$br(), 
+    "10X Tile % = Percentage of tiles with at least 5 CpGs each with at least 10X coverage of total tiles."
+  )
+) %>% formatStyle(
+  columns="percent_cpg",
+  backgroundColor = styleInterval(75, c('#ff4545', 'white'))
+) %>% formatStyle(
+  columns="percent_tile",
+  backgroundColor = styleInterval(75, c('#ff4545', 'white'))
+) %>% formatRound(
+  columns = round_cols,
+  digits = 2
+) %>% formatRound(
+  columns = int_cols,
+  digits = 0
+)
+```
+
+## Coverage Statistics
+CpGs and tiles must meet coverage requirements in all samples to be included in analysis.
+
+```{r coverage_stats, results="asis"}
+unite_percent_cpg <- round((meth@num.records / genome_cpg_cnt) * 100, 2)
+unite_percent_tile <- round((meth.tile@num.records / genome_tile_cnt) * 100, 2)
+
+if (unite_percent_cpg >= 75) {
+  cat("CpGs with at least 10X coverage in all samples:") 
+  cat(format(meth@num.records, big.mark = ","))
+  cat("\n\nPercentage of CpGs with at least 10X coverage in all samples of total CpGs:    ")
+  cat(paste0(unite_percent_cpg, "%"))
+} else {
+  cat("CpGs with at least 10X coverage in all samples: ")
+  cat(paste0("<span style='color: red;'>", format(meth@num.records, big.mark = ",") , "</span>"))
+  cat("\n\nPercentage of CpGs with at least 10X coverage in all samples of total CpGs:    ")
+  cat(paste0("<span style='color: red;'>", unite_percent_cpg , "%</span>"))
+}
+if (unite_percent_tile >= 75) {
+  cat("\n\nTiles with at least 5 CpGs each with at least 10X coverage in all samples:    ") 
+  cat(format(meth.tile@num.records, big.mark = ","))
+  cat("\n\nPercentage of tiles with at least 5 CpGs each with at least 10X coverage in all samples of total tiles:    ")
+  cat(paste0(unite_percent_tile, "%"))
+} else {
+  cat("\n\nTiles with at least 5 CpGs each with at least 10X coverage in all samples:    ") 
+  cat(paste0("<span style='color: red;'>", format(meth.tile@num.records, big.mark = ",") , "</span>"))
+  cat("\n\nPercentage of tiles with at least 5 CpGs each with at least 10X coverage in all samples of total tiles:    ")
+  cat(paste0("<span style='color: red;'>", unite_percent_tile , "%</span>"))
+}
 ```
 
 # PCA
@@ -679,7 +843,7 @@ setMethod("myPCASamples", "methylBaseDB",
 ```
 
 ## CpG
-PCA analysis on % methylation matrix **X** where **X ( i , j )**
+PCA analysis on CpG % methylation matrix **X** where **X ( i , j )**
 represents the % methylation of CpG **j** in sample **i**.
 
 ### Biplot
@@ -697,21 +861,8 @@ meth.cpg.mat <- myPCASamples(meth)
 
 ```
 
-
-```{r tiling_window_analysis, echo=FALSE}
-
-# converting my.obj to tile object for sliding 100 bp windows minimum coverage of 5 CpGs 
-tile.obj=invisible(tileMethylCounts(myobj,win.size=100,step.size=100,cov.bases=5))
-
-# in this version of the code we only required 2 out of the 3 total merged samples (one sample per patient source) to contain a methylation site for it to be included in the comparative analyses if min.per.group is not specified default is all samples must have a specific CpG site or meth tile covered to include it. 
-# meth.tile=methylKit::unite(tile.obj, destrand=FALSE, min.per.group = 2L) 
-
-# In this version of the code we are requiring all samples to have a methylation site for it to be included in the comparative analyses.
-meth.tile=methylKit::unite(tile.obj, destrand=FALSE)
-```
-
 ## Tile
-PCA analysis on % methylation matrix **X** where **X(i,j)**
+PCA analysis on tile % methylation matrix **X** where **X(i,j)**
 represents the % methylation of tile **j** in sample **i**.
 
 Tiles are 100 bp windows with a minimum of 5 CpGs.
@@ -733,7 +884,7 @@ meth.tile.mat <- myPCASamples(meth.tile)
 # Heatmap of the sample-to-sample distances
 
 ## CpG
-Euclidean distances between samples for % methylation of CpGs.
+Euclidean distances between samples in CpG % methylation matrix.
 
 ```{r, fig.height=9, fig.width=11}
 # Plot distance heatmap
@@ -741,7 +892,7 @@ Euclidean distances between samples for % methylation of CpGs.
 ```
 
 ## Tile
-Euclidean distances between samples for % methylation of tiles.
+Euclidean distances between samples in tile % methylation matrix.
 
 ```{r, fig.height=9, fig.width=11}
 # Plot distance heatmap
