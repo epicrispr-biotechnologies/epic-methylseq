@@ -82,6 +82,8 @@ library(GenomicRanges)
 library(rtracklayer)
 library(pheatmap)
 library(RColorBrewer)
+library(MASS)
+library(viridis)
 ```
 
 ```{r read_metadata}
@@ -899,44 +901,65 @@ Euclidean distances between samples in tile % methylation matrix.
 .distancePlot(meth.tile.mat, metadata)
 ```
 
-
-```{r}
-# find DMRs 
-myDiff.tile=calculateDiffMeth(meth.tile)
-```
-
 # Differentially methylated bases or regions
-The calculateDiffMeth() function is the main function to calculate differential methylation.
+Differentially methylated bases or regions are calcualted using methylKit.
 Depending on the sample size per each set it will either use Fisher’s exact or logistic regression to calculate P-values.
 P-values will be adjusted to Q-values using SLIM method (Wang, Tuominen, and Tsai 2011).
 Note: if we have replicates, the function will automatically use logistic regression.
-You can force the calculateDiffMeth() function to use Fisher’s exact test if you pool the replicates when there is only test and control sample groups.
 
 ```{r diff_meth_cpg}
 
-## Finding differentially methylated CpGs (differentially methylated regions is in the previous section)
+## Finding differentially methylated CpGs 
 myDiff=calculateDiffMeth(meth)
+# find DMRs 
+myDiff.tile=calculateDiffMeth(meth.tile)
 ```
 
 
 ```{r making_bed_files}
 
 # Extracting data from the methylDiff objects and writing to bed files
-
-## for tiling
-select.meth <- getData(myDiff.tile) #DMRs
-
-## for CpG sites 
-select.meth2 <- getData(myDiff) #DMCs
-
+meth.dmc <- getData(myDiff) 
+meth.dmr <- getData(myDiff.tile) 
 # write bedfile
-meth.bed <- as.data.frame(select.meth) #dmr
-meth.bed2 <- as.data.frame(select.meth2)#dmc
-write.table(meth.bed, paste0(params$out_path, "/", params$study,".meth.tile.all.bed"), sep="\t", col.names=FALSE, row.names=FALSE, quote=FALSE)
-write.table(meth.bed2, paste0(params$out_path, "/", params$study,".meth.cpg.all.bed"), sep="\t", col.names=FALSE, row.names=FALSE, quote=FALSE)
+meth.dmc.bed <- as.data.frame(meth.dmc)
+meth.dmr.bed <- as.data.frame(meth.dmr)
+write.table(meth.dmc.bed, paste0(params$out_path, "/", params$study,".meth.cpg.all.bed"), sep="\t", col.names=FALSE, row.names=FALSE, quote=FALSE)
+write.table(meth.dmr.bed, paste0(params$out_path, "/", params$study,".meth.tile.all.bed"), sep="\t", col.names=FALSE, row.names=FALSE, quote=FALSE)
 ```
 
-## DMR table
+```{r percent_methylation_cpg}
+
+perc.meth.cpg=percMethylation(meth, rowids = TRUE)
+perc.meth.cpg <- as.data.frame(perc.meth.cpg)
+perc.meth.cpg$avg_treat <- rowMeans(perc.meth.cpg[,colnames(perc.meth.cpg) %in% treated], na.rm = TRUE)
+perc.meth.cpg$avg_ctrl <- rowMeans(perc.meth.cpg[, colnames(perc.meth.cpg) %in% control], na.rm = TRUE)
+perc.meth.cpg$coord <- rownames(perc.meth.cpg)
+meth.dmc.bed$coord <- paste0(meth.dmc.bed$chr,".",meth.dmc.bed$start,".",meth.dmc.bed$end)
+perc.meth.cpg <- merge(perc.meth.cpg, meth.dmc.bed, by="coord")
+
+# This is the final CpG file we want!!!! 
+write.table(
+  perc.meth.cpg,
+  file = paste0(params$out_path, "/", params$study,".perc.meth.cpg.all.tsv"),
+  sep="\t",
+  col.names=TRUE,
+  row.names=FALSE,
+  quote=FALSE
+)
+
+# This is the final DMC file we want!!!
+perc.meth.cpg.sig <- perc.meth.cpg[perc.meth.cpg$qvalue <=0.01 & abs(perc.meth.cpg$meth.diff) > 10,]
+write.table(
+  perc.meth.cpg.sig,
+  file = paste0(params$out_path, "/", params$study,".perc.meth.cpg.all.q0.01.methdiff.10.tsv"),
+  sep="\t",
+  col.names=TRUE,
+  row.names=FALSE,
+  quote=FALSE
+)
+```
+
 ```{r percent_methylation_tile}
 
 perc.meth.tile=percMethylation(meth.tile, rowids = TRUE)
@@ -944,8 +967,8 @@ perc.meth.tile <- as.data.frame(perc.meth.tile)
 perc.meth.tile$avg_treat <- rowMeans(perc.meth.tile[, colnames(perc.meth.tile) %in% treated], na.rm = TRUE)
 perc.meth.tile$avg_ctrl <- rowMeans(perc.meth.tile[, colnames(perc.meth.tile) %in% control], na.rm = TRUE)
 perc.meth.tile$coord <- rownames(perc.meth.tile)
-meth.bed$coord <- paste0(meth.bed$chr,".",meth.bed$start,".",meth.bed$end)
-perc.meth.tile <- merge(perc.meth.tile, meth.bed, by="coord")
+meth.dmr.bed$coord <- paste0(meth.dmr.bed$chr,".",meth.dmr.bed$start,".",meth.dmr.bed$end)
+perc.meth.tile <- merge(perc.meth.tile, meth.dmr.bed, by="coord")
 
 # This is the final MR file we want!!!! 
 write.table(
@@ -970,6 +993,7 @@ write.table(
 )
 ```
 
+## DMR table
 **`r nrow(perc.meth.tile.sig)`** DMRs were identified with q-value < 0.01 and % methylation difference > 10.
 
 ```{r dmr_table}
@@ -1130,41 +1154,67 @@ ggplot(
   )
 ```
 
+## CpG % methylation scatterplot
 
-```{r percent_methylation_cpg}
+```{r cpg_scatterplot, fig.height=10, fig.width=12, dev="png"}
 
-perc.meth.cpg=percMethylation(meth, rowids = TRUE)
-perc.meth.cpg <- as.data.frame(perc.meth.cpg)
-perc.meth.cpg$avg_treat <- rowMeans(perc.meth.cpg[,colnames(perc.meth.cpg) %in% treated], na.rm = TRUE)
-perc.meth.cpg$avg_ctrl <- rowMeans(perc.meth.cpg[, colnames(perc.meth.cpg) %in% control], na.rm = TRUE)
-perc.meth.cpg$coord <- rownames(perc.meth.cpg)
-meth.bed2$coord <- paste0(meth.bed2$chr,".",meth.bed2$start,".",meth.bed2$end)
-perc.meth.cpg <- merge(perc.meth.cpg, meth.bed2, by="coord")
+# Using Kamil Slowikowski color points by density with ggplot2
+# https://slowkow.com/notes/ggplot2-color-by-density/
 
-# This is the final CpG file we want!!!! 
-write.table(
-  perc.meth.cpg,
-  file = paste0(params$out_path, "/", params$study,".perc.meth.cpg.all.tsv"),
-  sep="\t",
-  col.names=TRUE,
-  row.names=FALSE,
-  quote=FALSE
-)
+# Get density of points in 2 dimensions.
+# @param x A numeric vector.
+# @param y A numeric vector.
+# @param n Create a square n by n grid to compute density.
+# @return The density within each square.
+get_density <- function(x, y, ...) {
+  dens <- MASS::kde2d(x, y, ...)
+  ix <- findInterval(x, dens$x)
+  iy <- findInterval(y, dens$y)
+  ii <- cbind(ix, iy)
+  return(dens$z[ii])
+}
 
-# This is the final DMC file we want!!!
-perc.meth.cpg.sig <- perc.meth.cpg[perc.meth.cpg$qvalue <=0.01 & abs(perc.meth.cpg$meth.diff) > 10,]
-write.table(
-  perc.meth.cpg.sig,
-  file = paste0(params$out_path, "/", params$study,".perc.meth.cpg.all.q0.01.methdiff.10.tsv"),
-  sep="\t",
-  col.names=TRUE,
-  row.names=FALSE,
-  quote=FALSE
-)
+perc.meth.cpg$density <- get_density(
+  perc.meth.cpg$avg_ctrl, perc.meth.cpg$avg_treat, n = 100)
+
+th <- theme_bw(base_size=24) + 
+  theme(
+    plot.title = element_text(
+      angle = 0,
+      size = 18,
+      face = 'bold',
+      vjust = 1),
+    axis.text.x = element_text(
+      angle = 0,
+      size = 18,
+      vjust = 1),
+    axis.text.y = element_text(
+      angle = 0,
+      size = 18,
+      vjust = 0.5),
+    axis.title = element_text(
+      size = 18),
+    legend.text = element_text(
+      size = 14),
+    legend.title = element_text(
+      size = 18)
+  )
+
+ggplot(perc.meth.cpg) + 
+  geom_point(aes(x=avg_ctrl, y=avg_treat, color = density)) + 
+  scale_color_viridis() +
+  geom_abline(intercept=10, slope=1, linetype="dashed", color="red") +
+  geom_abline(intercept=-10, slope=1, linetype="dashed", color="red") +
+  labs(
+    x="Average % methylation in CONTROL",
+    y="Average % methylation in EPI321",
+    title="EPI321 vs CONTROL CpGs"
+  ) +
+  th 
 ```
 
-
 # DMR annotation
+
 ```{r dmr_annotation}
 # Generate Granges object from DMRs dataframe
 dmrs_df <- perc.meth.tile.sig[c("chr", "start", "end", "qvalue", "meth.diff")]
@@ -1209,6 +1259,16 @@ ChromHMM annotations were sourced from https://github.com/ernstlab/mouse_fullSta
 **`r count_dmr_overlap` / `r total_sig_dmrs`** 
 **(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with ChromHMM annotations.  
 Note: a single DMR may have multiple ChromHMM annotations.
+
+```{r chromhmm_plot, fig.height=10, fig.width=13}
+ggplot(overlap_df, aes(x=ChromHMM.state)) +
+  geom_bar(fill = "#1c3f74") + 
+  th + 
+  labs(
+    x = "ChromHMM state",
+  ) +
+  coord_flip()
+```
 
 ```{r chromhmm_table}
 # Display in table
@@ -1284,6 +1344,16 @@ https://screen.encodeproject.org/ all mouse cCREs (mm10) Registry of cCREs V3
 **`r count_dmr_overlap` / `r total_sig_dmrs`** 
 **(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with cCRE annotations.  
 Note: a single DMR may have multiple cCRE annotations.
+
+```{r ccre_plot, fig.height=10, fig.width=13}
+ggplot(overlap_df, aes(x=class)) +
+  geom_bar(fill = "#1c3f74") + 
+  th + 
+  labs(
+    x = "cCRE classificaiton",
+  ) +
+  coord_flip()
+```
 
 ```{r ccre_table}
 # Display in table
