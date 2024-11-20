@@ -117,18 +117,42 @@ unordered_files <- list.files(
 # Ensure files are ordered according to metadata sample sheet
 cov_files <- as.list(sapply(metadata$sample, find_files_with_prefix, files = unordered_files))
 
-# Currently only supporting EPI321 vs Control comparison
-treatment <- ifelse(metadata$condition == "EPI321", 1, 0)
-treated <- metadata$sample[metadata$condition == "EPI321"]
-control <- metadata$sample[metadata$condition == "CONTROL"]
+# Create variables for treated and control samples
+if ("EPI321" %in% metadata$condition & "CONTROL" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "EPI321", 1, 0)
+  treated <- metadata$sample[metadata$condition == "EPI321"]
+  control <- metadata$sample[metadata$condition == "CONTROL"]
+  contrast <- c("EPI321", "CONTROL")
+} else if ("6-MONTH" %in% metadata$condition & "3-MONTH" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "6-MONTH", 1, 0)
+  treated <- metadata$sample[metadata$condition == "6-MONTH"]
+  control <- metadata$sample[metadata$condition == "3-MONTH"]
+  contrast <- c("6-MONTH", "3-MONTH")
+} else if ("UD" %in% metadata$condition & "D2" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "D2", 1, 0)
+  treated <- metadata$sample[metadata$condition == "D2"]
+  control <- metadata$sample[metadata$condition == "UD"]
+  contrast <- c("D2", "UD")
+} else if ("UD" %in% metadata$condition & "D7" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "D7", 1, 0)
+  treated <- metadata$sample[metadata$condition == "D7"]
+  control <- metadata$sample[metadata$condition == "UD"]
+  contrast <- c("D7", "UD")
+} else if ("D2" %in% metadata$condition & "D7" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "D7", 1, 0)
+  treated <- metadata$sample[metadata$condition == "D7"]
+  control <- metadata$sample[metadata$condition == "D2"]
+  contrast <- c("D7", "D2")
+} else {
+  stop("Unknown contrast specified in samplesheet condition column")
+}
 
 # read methylation call files and store them as flat file database
 # Note gzipped files are supported
 # Note that the doc for methylKit says bismark coverage files have 5 cols, 
 # but the bismark coverage files have 6 cols and the code for the methylKit methRead function expects 6 cols:
 # chr, start, end, % meth, count methylated, count unmethylated
-
-myobj=invisible(methRead(cov_files,
+myobj=methRead(cov_files,
                 sample.id=as.list(metadata$sample),
                 pipeline="bismarkCoverage",
                 assembly=params$assembly,
@@ -137,7 +161,7 @@ myobj=invisible(methRead(cov_files,
                 dbtype = "tabix",
                 dbdir = "methylDB",
                 header = FALSE
-))
+)
 # Merging all samples into one file. This is needed as precursor for dmc analyses  
 meth=invisible(methylKit::unite(myobj, destrand=FALSE))
 ```
@@ -590,19 +614,18 @@ applyTbxByChunk<-function(tbxFile,chunk.size=1e6,dir,filename,
 # Principal Components Analysis on methylBase object on transposed data
 # x matrix each column is a sample
 .myPcaPlotT = function(x,comp1=1,comp2=2,screeplot=FALSE, adj.lim=c(0.001,0.1),
-                     treatment=treatment,sample.ids=sample.ids,context,
+                     treatment,sample.ids=sample.ids,context,
                      scale=TRUE,center=TRUE,obj.return=FALSE){
 
   x.pr = prcomp(t(x),scale.=scale,center=center)
  
   #loads = loadings(x.pr)
   #loads = x.pr$rotation
-  condition = ifelse(treatment == 1, "EPI321", "CONTROL")
   sample.ids = sample.ids
   d <- data.frame(
     PC1=x.pr$x[,1],
     PC2=x.pr$x[,2],
-    condition=condition
+    condition=treatment
   )
   p <- ggplot(data=d, aes(x=PC1, y=PC2, color=condition)) +
     geom_point(size=3) + 
@@ -701,10 +724,11 @@ applyTbxByChunk<-function(tbxFile,chunk.size=1e6,dir,filename,
 #'        or not. (Default:FALSE)
 #' @param chunk.size Number of rows to be taken as a chunk for processing the 
 #' \code{methylRawListDB} objects, default: 1e6
+#' @param condition a vector of conditions for each sample
 #' 
 #' @usage PCASamples(.Object, screeplot=FALSE, adj.lim=c(0.0004,0.1), scale=TRUE,
 #' center=TRUE,comp=c(1,2),transpose=TRUE,sd.filter=TRUE,
-#'            sd.threshold=0.5,filterByQuantile=TRUE,obj.return=FALSE,chunk.size)
+#'            sd.threshold=0.5,filterByQuantile=TRUE,obj.return=FALSE,chunk.size,condition)
 #' 
 #' @examples
 #' data(methylKit) 
@@ -741,9 +765,11 @@ invisible(
                                   transpose=TRUE,
                                   sd.filter=TRUE,sd.threshold=0.5,
                                   filterByQuantile=TRUE,obj.return=FALSE,
-                                  chunk.size=1e6) 
+                                  chunk.size=1e6,condition) 
           standardGeneric("myPCASamples"))
 )
+#' We will never use the methylBase method and always use methylBaseDB method
+#' leaving it here for reference
 #' @rdname PCASamples-methods
 #' @aliases PCASamples,methylBase-method
 setMethod("myPCASamples", "methylBase",
@@ -793,7 +819,7 @@ setMethod("myPCASamples", "methylBase",
 setMethod("myPCASamples", "methylBaseDB",
           function(.Object, screeplot, adj.lim,scale,center,comp,
                    transpose,sd.filter, sd.threshold, 
-                   filterByQuantile,obj.return,chunk.size)
+                   filterByQuantile,obj.return,chunk.size,condition)
 {
   
   getMethMat <- function(mat,numCs.index,numTs.index,sd.filter, 
@@ -831,11 +857,12 @@ setMethod("myPCASamples", "methylBaseDB",
   if(transpose){
     .myPcaPlotT(meth.mat,comp1=comp[1],comp2=comp[2],screeplot=screeplot, 
               adj.lim=adj.lim, 
-              treatment=.Object@treatment,sample.ids=.Object@sample.ids,
+              treatment=condition,sample.ids=.Object@sample.ids,
               context=.Object@context
               ,scale=scale,center=center,obj.return=obj.return)
     
   }else{
+    # We will never use the non transpose version, leaving it here for reference
     .myPcaPlot(meth.mat,comp1=comp[1],comp2=comp[2],screeplot=screeplot, 
              adj.lim=adj.lim, 
              treatment=.Object@treatment,sample.ids=.Object@sample.ids,
@@ -856,7 +883,7 @@ represents the % methylation of CpG **j** in sample **i**.
 
 ```{r pca_biplot_cpg, fig.height=9, fig.width=11}
 # Run my version of PCA analysis with prettier plotting
-meth.cpg.mat <- myPCASamples(meth)
+meth.cpg.mat <- myPCASamples(meth, condition=metadata$condition)
 ```
 
 ### Scree plot
@@ -877,7 +904,7 @@ Tiles are 100 bp windows with a minimum of 5 CpGs.
 
 ```{r pca_biplot_tile, fig.height=9, fig.width=11}
 # Plot PCA biplot
-meth.tile.mat <- myPCASamples(meth.tile)
+meth.tile.mat <- myPCASamples(meth.tile, condition=metadata$condition)
 ```
 
 ### Screeplot
@@ -906,10 +933,7 @@ Euclidean distances between samples in tile % methylation matrix.
 ```
 
 # Differentially methylated bases or regions
-Differentially methylated bases or regions are calcualted using methylKit.
-Depending on the sample size per each set it will either use Fisher’s exact or logistic regression to calculate P-values.
-P-values will be adjusted to Q-values using SLIM method (Wang, Tuominen, and Tsai 2011).
-Note: if we have replicates, the function will automatically use logistic regression.
+
 
 ```{r diff_meth_cpg}
 
@@ -992,6 +1016,9 @@ write.table(
 
 ## CpG % methylation scatterplot
 
+All `r nrow(perc.meth.cpg)` CpGs are plotted with 
+average % methylation in `r paste0(contrast[1], " vs ", contrast[2])`.
+
 ```{r cpg_scatterplot, fig.height=10, fig.width=12, dev="png"}
 
 # Using Kamil Slowikowski color points by density with ggplot2
@@ -1042,14 +1069,22 @@ ggplot(perc.meth.cpg) +
   geom_abline(intercept=10, slope=1, linetype="dashed", color="red") +
   geom_abline(intercept=-10, slope=1, linetype="dashed", color="red") +
   labs(
-    x="Average % methylation in CONTROL",
-    y="Average % methylation in EPI321",
-    title="EPI321 vs CONTROL CpGs"
+    x=paste("Average % methylation in", contrast[2]),
+    y=paste("Average % methylation in", contrast[1]),
+    title=paste(contrast[1], "vs", contrast[2], "CpGs")
   ) +
   th 
 ```
 
 ## DMR table
+Differentially methylated regions are calcualted using methylKit.
+Depending on the sample size per each set it will either use Fisher’s exact or logistic regression to calculate P-values.
+P-values will be adjusted to Q-values using SLIM method (Wang, Tuominen, and Tsai 2011).
+Note: if we have replicates, the function will automatically use logistic regression.
+
+Treatment : `r contrast[1]`  
+Control : `r contrast[2]`
+
 **`r nrow(perc.meth.tile.sig)`** DMRs were identified with q-value < 0.01 and % methylation difference > 10.
 
 ```{r dmr_table}
@@ -1073,6 +1108,12 @@ datatable(
   options = list(
     dom = "Bfrtip",
     buttons = c("copy", "csv", "excel", "pdf", "print")
+  ),
+  caption= htmltools::tags$caption(
+    style = 'caption-side: bottom;',  
+    paste("avg_treat = Average DMR % methylation across", contrast[1], "samples"), htmltools::tags$br(),
+    paste("avg_ctrl = Average DMR % methylation across", contrast[2], "samples"), htmltools::tags$br(),
+    paste("meth.diff =", contrast[1], "DMR % methylation -", contrast[2], "DMR % methylation") 
   )
 ) %>%
 formatSignif(
@@ -1088,6 +1129,7 @@ formatRound(
 ```
 
 ## Volcano plot
+`r paste("% methylation change =", contrast[1], "% methylation -", contrast[2], "% methylation")`
 
 ```{r volcano_plot, fig.height=10, fig.width=10}
 
@@ -1198,7 +1240,7 @@ ggplot(
   labs(
     x = "% methylation change",
     y = "-log10(qvalue)",
-    title = "EPI321 vs CONTROL total DMRs",
+    title = paste(contrast[1], "vs", contrast[2], "total DMRs"),
     subtitle = "Thresholds: qvalue=0.01, meth.diff=10"
   ) +
   guides(
@@ -1226,8 +1268,7 @@ dmrs_gr <- makeGRangesFromDataFrame(
 ```
 
 ## Distance to nearest gene
-Distances from DMR to nearest gene.
-
+Distances from DMR to nearest gene.  
 Distances are calculated with respect to gene TSS from GTF file.
 
 ```{r nearest_gene}
@@ -1256,7 +1297,7 @@ nearest_genes_df <- cbind(dmrs_df, nearest_genes, distances)
 
 ```{r nearest_gene_plot, fig.height=10, fig.width=13}
 ggplot(nearest_genes_df, aes(x=distance)) +
-  geom_histogram(fill="#1c3f74", bins=50) + 
+  geom_histogram(color="black", fill="#1c3f74", bins=50) + 
   scale_x_log10(labels = scales::label_number()) +
   th + 
   labs(
@@ -1292,9 +1333,19 @@ formatRound(
 )
 ```
 
+```{r, mouse_or_human}
+# Check if the assembly is mouse or human for ChromHMM, cCRE, and blacklist analysis
+if ((params$assembly %in% hg38_names) | (params$assembly %in% mm10_names)) {
+  mouse_or_human <- TRUE
+} else {
+  mouse_or_human <- FALSE
+}
+```
+
+
 ## ChromHMM
 
-```{r chromhmm}
+```{r chromhmm, eval=mouse_or_human}
 
 # Load ChromHMM annotation
 chromhmm_gr <- rtracklayer::import(params$chromhmm_path)
@@ -1324,7 +1375,7 @@ ChromHMM annotations were sourced from https://github.com/ernstlab/mouse_fullSta
 **(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with ChromHMM annotations.  
 Note: a single DMR may have multiple ChromHMM annotations.
 
-```{r chromhmm_plot, fig.height=10, fig.width=13}
+```{r chromhmm_plot, fig.height=10, fig.width=13, eval=mouse_or_human}
 ggplot(overlap_df, aes(x=ChromHMM.state)) +
   geom_bar(fill = "#1c3f74") + 
   th + 
@@ -1334,7 +1385,7 @@ ggplot(overlap_df, aes(x=ChromHMM.state)) +
   coord_flip()
 ```
 
-```{r chromhmm_table}
+```{r chromhmm_table, eval=mouse_or_human}
 # Display in table
 round_cols <- c("qvalue", "meth.diff")
 bp_cols <- c("start", "end")
@@ -1361,7 +1412,7 @@ formatRound(
 
 ## ENCODE cCRE
 
-```{r ccre}
+```{r ccre, eval=mouse_or_human}
 
 # Load cCRE annotation
 ccre_df <- read.table(
@@ -1409,7 +1460,7 @@ https://screen.encodeproject.org/ all mouse cCREs (mm10) Registry of cCREs V3
 **(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with cCRE annotations.  
 Note: a single DMR may have multiple cCRE annotations.
 
-```{r ccre_plot, fig.height=10, fig.width=13}
+```{r ccre_plot, fig.height=10, fig.width=13, eval=mouse_or_human}
 ggplot(overlap_df, aes(x=class)) +
   geom_bar(fill = "#1c3f74") + 
   th + 
@@ -1419,7 +1470,7 @@ ggplot(overlap_df, aes(x=class)) +
   coord_flip()
 ```
 
-```{r ccre_table}
+```{r ccre_table, eval=mouse_or_human}
 # Display in table
 round_cols <- c("qvalue", "meth.diff")
 bp_cols <- c("start", "end")
@@ -1446,7 +1497,7 @@ formatRound(
 
 ## ENCODE Blacklist
 
-```{r blacklist}
+```{r blacklist, eval=mouse_or_human}
 
 # Load ChromHMM annotation
 blacklist_gr <- rtracklayer::import(params$blacklist_path)
@@ -1476,7 +1527,7 @@ ChromHMM annotations were sourced from https://github.com/Boyle-Lab/Blacklist/bl
 **(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with blacklist annotations.  
 Note: a single DMR may have multiple blacklist annotations.
 
-```{r blacklist_table}
+```{r blacklist_table, eval=mouse_or_human}
 # Display in table
 round_cols <- c("qvalue", "meth.diff")
 bp_cols <- c("start", "end")
