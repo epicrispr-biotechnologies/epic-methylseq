@@ -1298,12 +1298,6 @@ gtf_gr <- rtracklayer::import(params$gtf_path, format = "gtf")
 genes_gr <- gtf_gr[gtf_gr$type == "gene"] 
 tss_gr <- resize(genes_gr, width = 1, fix = "start")
 
-# Add prefix "chr" to contig names in gtf for nearest gene searching.
-# For some of the contigs like KI270711.1 it does not make sense to prefix with "chr".
-# However, since we are only interested in canonical chromosomes, 
-# adding the prefix to all contigs should be fine. 
-seqlevels(tss_gr) <- paste0("chr", seqlevels(tss_gr))
-
 # Calculate distance to nearest gene
 nearest_hits <- distanceToNearest(dmrs_gr, tss_gr)
 distances <- mcols(nearest_hits)
