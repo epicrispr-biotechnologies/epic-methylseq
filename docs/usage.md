@@ -189,12 +189,19 @@ Usage from command line:
 ```
 Rscript -e "rmarkdown::render(
   'bin/methylkit.rmd',
+  output_file = 'JIRA_BDS-1031_3m_Mouse_EPI321_vs_CONTROL_methylkit_report.html',
+  output_dir = '/home/ec2-user/epic-methylseq_data/JIRA_BDS-1008_Mouse_3m/EMseq_JIRABDS1031/methylkit',
+  intermediates_dir = '/tmp',
   params = list(
-    study = 'JIRA_BDS-XXXX_12ABIC_EPI321_vs_CONTROL',
-    metadata_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC/samplesheet_test_12ABIC.csv',
-    bismark_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC',
-    out_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit',
-    assembly = 'hg38'
+    study = 'JIRA_BDS-1031_3m_Mouse_EPI321_vs_CONTROL', 
+    metadata_path = '/home/ec2-user/epic-methylseq_data/JIRA_BDS-1008_Mouse_3m/EMseq_JIRABDS1031/samplesheet.csv',
+    bismark_path = '/home/ec2-user/epic-methylseq_data/JIRA_BDS-1008_Mouse_3m/EMseq_JIRABDS1031/methylation_coverage',
+    gtf_path = '/home/ec2-user/references/mm10/gtf/Mus_musculus.GRCm38.102.cas_molecule.gtf',
+    chromhmm_path = '/home/ec2-user/epic-methylseq_data/ChromHMM/mm10_100_segments_segments.bed',
+    ccre_path = '/home/ec2-user/epic-methylseq_data/cCRE/mm10-cCREs.bed',
+    blacklist_path = '/home/ec2-user/epic-methylseq_data/blacklist/mm10-blacklist.v2.bed',
+    out_path = '/home/ec2-user/epic-methylseq_data/JIRA_BDS-1008_Mouse_3m/EMseq_JIRABDS1031/methylkit',
+    assembly = 'mm10'
   )
 )"
 ```
