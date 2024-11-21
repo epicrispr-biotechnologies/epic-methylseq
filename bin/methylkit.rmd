@@ -1113,15 +1113,15 @@ datatable(
       ),
       list(
         extend = "csv",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "dmr", sep="_")
       ),
       list(
         extend = "excel",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "dmr", sep="_")
       ),
       list(
         extend = "pdf",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "dmr", sep="_")
       ),
       list(
         extend = "print"
@@ -1344,15 +1344,15 @@ datatable(
       ),
       list(
         extend = "csv",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "nearest_gene", sep="_")
       ),
       list(
         extend = "excel",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "nearest_gene", sep="_")
       ),
       list(
         extend = "pdf",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "nearest_gene", sep="_")
       ),
       list(
         extend = "print"
@@ -1440,15 +1440,15 @@ datatable(
       ),
       list(
         extend = "csv",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "chromhmm", sep="_")
       ),
       list(
         extend = "excel",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "chromhmm", sep="_")
       ),
       list(
         extend = "pdf",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "chromhmm", sep="_")
       ),
       list(
         extend = "print"
@@ -1544,15 +1544,15 @@ datatable(
       ),
       list(
         extend = "csv",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "ccre", sep="_")
       ),
       list(
         extend = "excel",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "ccre", sep="_")
       ),
       list(
         extend = "pdf",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "ccre", sep="_")
       ),
       list(
         extend = "print"
@@ -1620,15 +1620,15 @@ datatable(
       ),
       list(
         extend = "csv",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "blacklist", sep="_")
       ),
       list(
         extend = "excel",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "blacklist", sep="_")
       ),
       list(
         extend = "pdf",
-        filename = paste(params$study, "dmr", sep="_"),
+        filename = paste(params$study, "blacklist", sep="_")
       ),
       list(
         extend = "print"
