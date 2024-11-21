@@ -962,7 +962,7 @@ perc.meth.cpg <- merge(perc.meth.cpg, meth.dmc.df, by="coord")
 # This is the final CpG file we want!!!! 
 write.table(
   perc.meth.cpg,
-  file = paste0(params$out_path, "/", params$study,".perc.meth.cpg.all.tsv"),
+  file = paste0(params$out_path, "/", params$study,"_dmc.tsv"),
   sep="\t",
   col.names=TRUE,
   row.names=FALSE,
@@ -973,7 +973,7 @@ write.table(
 perc.meth.cpg.sig <- perc.meth.cpg[perc.meth.cpg$qvalue <=0.01 & abs(perc.meth.cpg$meth.diff) > 10,]
 write.table(
   perc.meth.cpg.sig,
-  file = paste0(params$out_path, "/", params$study,".perc.meth.cpg.all.q0.01.methdiff.10.tsv"),
+  file = paste0(params$out_path, "/", params$study,"_dmc_qval_0.01_methdiff_10.tsv"),
   sep="\t",
   col.names=TRUE,
   row.names=FALSE,
@@ -994,7 +994,7 @@ perc.meth.tile <- merge(perc.meth.tile, meth.dmr.df, by="coord")
 # This is the final MR file we want!!!! 
 write.table(
   perc.meth.tile,
-  file = paste0(params$out_path, "/", params$study,".perc.meth.tile.all.tsv"),
+  file = paste0(params$out_path, "/", params$study,"_dmr.tsv"),
   sep="\t",
   col.names=TRUE,
   row.names=FALSE,
@@ -1006,7 +1006,7 @@ total_sig_dmrs <- nrow(perc.meth.tile.sig)
 
 write.table(
   perc.meth.tile.sig,
-  file = paste0(params$out_path, "/", params$study,".perc.meth.tile.all.q0.01.methdiff.10.tsv"),
+  file = paste0(params$out_path, "/", params$study,"_dmr_q0.01_methdiff_10.tsv"),
   sep="\t",
   col.names=TRUE,
   row.names=FALSE,
@@ -1107,7 +1107,26 @@ datatable(
   extensions = "Buttons",
   options = list(
     dom = "Bfrtip",
-    buttons = c("copy", "csv", "excel", "pdf", "print")
+    buttons = list(
+      list(
+        extend = "copy"
+      ),
+      list(
+        extend = "csv",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "excel",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "pdf",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "print"
+      )
+    )
   ),
   caption= htmltools::tags$caption(
     style = 'caption-side: bottom;',  
@@ -1319,7 +1338,26 @@ datatable(
   extensions = "Buttons",
   options = list(
     dom = "Bfrtip",
-    buttons = c("copy", "csv", "excel", "pdf", "print")
+    buttons = list(
+      list(
+        extend = "copy"
+      ),
+      list(
+        extend = "csv",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "excel",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "pdf",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "print"
+      )
+    )
   )
 ) %>%
 formatSignif(
@@ -1396,7 +1434,26 @@ datatable(
   extensions = "Buttons",
   options = list(
     dom = "Bfrtip",
-    buttons = c("copy", "csv", "excel", "pdf", "print")
+    buttons = list(
+      list(
+        extend = "copy"
+      ),
+      list(
+        extend = "csv",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "excel",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "pdf",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "print"
+      )
+    )
   )
 ) %>%
 formatSignif(
@@ -1481,7 +1538,26 @@ datatable(
   extensions = "Buttons",
   options = list(
     dom = "Bfrtip",
-    buttons = c("copy", "csv", "excel", "pdf", "print")
+    buttons = list(
+      list(
+        extend = "copy"
+      ),
+      list(
+        extend = "csv",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "excel",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "pdf",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "print"
+      )
+    )
   )
 ) %>%
 formatSignif(
@@ -1538,7 +1614,26 @@ datatable(
   extensions = "Buttons",
   options = list(
     dom = "Bfrtip",
-    buttons = c("copy", "csv", "excel", "pdf", "print")
+    buttons = list(
+      list(
+        extend = "copy"
+      ),
+      list(
+        extend = "csv",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "excel",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "pdf",
+        filename = paste(params$study, "dmr", sep="_"),
+      ),
+      list(
+        extend = "print"
+      )
+    )
   )
 ) %>%
 formatSignif(
