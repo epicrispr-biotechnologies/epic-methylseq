@@ -1383,6 +1383,8 @@ run_dmr_annotation <- run_dmr_annotation & mouse_or_human
 
 # Load ChromHMM annotation
 chromhmm_gr <- rtracklayer::import(params$chromhmm_path)
+# Remove "chr" chromosome prefix in ChromHMM GRanges object
+seqlevels(chromhmm_gr) <- gsub("chr", "", seqlevels(chromhmm_gr))
 chromhmm_df <- as.data.frame(chromhmm_gr)
 chromhmm_df <- chromhmm_df["name"]
 
@@ -1483,6 +1485,9 @@ ccre_df <- read.table(
 # but since it is a BED file, we will assume it is 0-based
 ccre_df$start <- ccre_df$start + 1
 
+# Remove "chr" chromosome prefix in cCRE dataframe
+ccre_df$chr <- gsub("chr", "", ccre_df$chr)
+
 ccre_gr <- makeGRangesFromDataFrame(
   ccre_df,
   ignore.strand = TRUE,
@@ -1581,6 +1586,8 @@ if (count_dmr_overlap > 0) {
 
 # Load ChromHMM annotation
 blacklist_gr <- rtracklayer::import(params$blacklist_path)
+# Remove "chr" chromosome prefix in blacklist GRanges object
+seqlevels(blacklist_gr) <- gsub("chr", "", seqlevels(blacklist_gr))
 blacklist_df <- as.data.frame(blacklist_gr)
 blacklist_df <- blacklist_df["name"]
 
