@@ -1003,6 +1003,7 @@ write.table(
 # This is the final DMR file we want!!!!
 perc.meth.tile.sig <- perc.meth.tile[perc.meth.tile$qvalue < 0.01 & abs(perc.meth.tile$meth.diff) > 10,]
 total_sig_dmrs <- nrow(perc.meth.tile.sig)
+run_dmr_annotation <- total_sig_dmrs > 0
 
 write.table(
   perc.meth.tile.sig,
@@ -1085,13 +1086,13 @@ Note: if we have replicates, the function will automatically use logistic regres
 Treatment : `r contrast[1]`  
 Control : `r contrast[2]`
 
-**`r nrow(perc.meth.tile.sig)`** DMRs were identified with q-value < 0.01 and % methylation difference > 10.
+**`r total_sig_dmrs`** DMRs were identified with q-value < 0.01 and % methylation difference > 10.
 
-```{r dmr_table}
+```{r dmr_table, eval=run_dmr_annotation}
 # Display in table
 non_sample_cols <- c("coord", "avg_treat", "avg_ctrl", "chr", "start", "end", "strand", "pvalue", "qvalue", "meth.diff")
-sample_cols <- colnames(perc.meth.tile)[!colnames(perc.meth.tile) %in% non_sample_cols]
-dmr_table <- perc.meth.tile.sig[ , !colnames(perc.meth.tile.sig) %in% non_sample_cols]
+sample_cols <- colnames(perc.meth.tile.sig)[!colnames(perc.meth.tile.sig) %in% non_sample_cols]
+dmr_table <- perc.meth.tile.sig[sample_cols]
 dmr_table <- cbind(
   perc.meth.tile.sig[c("chr", "start", "end")],
   dmr_table,
@@ -1273,7 +1274,7 @@ ggplot(
 
 # DMR annotation
 
-```{r dmr_annotation}
+```{r dmr_annotation, eval=run_dmr_annotation}
 # Generate Granges object from DMRs dataframe
 dmrs_df <- perc.meth.tile.sig[c("chr", "start", "end", "qvalue", "meth.diff")]
 dmrs_gr <- makeGRangesFromDataFrame(
@@ -1290,7 +1291,7 @@ dmrs_gr <- makeGRangesFromDataFrame(
 Distances from DMR to nearest gene.  
 Distances are calculated with respect to gene TSS from GTF file.
 
-```{r nearest_gene}
+```{r nearest_gene, eval=run_dmr_annotation}
 # Load GTF file as GRanges object
 gtf_gr <- rtracklayer::import(params$gtf_path, format = "gtf")
 
@@ -1314,7 +1315,7 @@ colnames(nearest_genes) <- gsub("_", ".", colnames(nearest_genes))
 nearest_genes_df <- cbind(dmrs_df, nearest_genes, distances)
 ```
 
-```{r nearest_gene_plot, fig.height=10, fig.width=13}
+```{r nearest_gene_plot, eval=run_dmr_annotation, fig.height=10, fig.width=13}
 ggplot(nearest_genes_df, aes(x=distance)) +
   geom_histogram(color="black", fill="#1c3f74", bins=50) + 
   scale_x_log10(labels = scales::label_number()) +
@@ -1327,7 +1328,7 @@ ggplot(nearest_genes_df, aes(x=distance)) +
 
 DMRs annotated with nearest gene information.
 
-```{r nearest_gene_table}
+```{r nearest_gene_table, eval=run_dmr_annotation}
 # Display in table
 round_cols <- c("qvalue", "meth.diff")
 int_cols <- c("start", "end", "distance")
@@ -1378,12 +1379,13 @@ if ((params$assembly %in% hg38_names) | (params$assembly %in% mm10_names)) {
 } else {
   mouse_or_human <- FALSE
 }
+run_dmr_annotation <- run_dmr_annotation & mouse_or_human
 ```
 
 
 ## ChromHMM
 
-```{r chromhmm, eval=mouse_or_human}
+```{r chromhmm, eval=run_dmr_annotation}
 
 # Load ChromHMM annotation
 chromhmm_gr <- rtracklayer::import(params$chromhmm_path)
@@ -1413,63 +1415,67 @@ ChromHMM annotations were sourced from https://github.com/ernstlab/mouse_fullSta
 **(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with ChromHMM annotations.  
 Note: a single DMR may have multiple ChromHMM annotations.
 
-```{r chromhmm_plot, fig.height=10, fig.width=13, eval=mouse_or_human}
-ggplot(overlap_df, aes(x=ChromHMM.state)) +
-  geom_bar(fill = "#1c3f74") + 
-  th + 
-  labs(
-    x = "ChromHMM state",
-  ) +
-  coord_flip()
+```{r chromhmm_plot, eval=run_dmr_annotation, fig.height=10, fig.width=13}
+if (count_dmr_overlap > 0) {
+  ggplot(overlap_df, aes(x=ChromHMM.state)) +
+    geom_bar(fill = "#1c3f74") + 
+    th + 
+    labs(
+      x = "ChromHMM state",
+    ) +
+    coord_flip()
+}
 ```
 
-```{r chromhmm_table, eval=mouse_or_human}
-# Display in table
-round_cols <- c("qvalue", "meth.diff")
-bp_cols <- c("start", "end")
+```{r chromhmm_table, eval=run_dmr_annotation}
+if (count_dmr_overlap > 0) {
+  # Display in table
+  round_cols <- c("qvalue", "meth.diff")
+  bp_cols <- c("start", "end")
 
-datatable(
-  overlap_df,
-  rownames = FALSE,
-  extensions = "Buttons",
-  options = list(
-    dom = "Bfrtip",
-    buttons = list(
-      list(
-        extend = "copy"
-      ),
-      list(
-        extend = "csv",
-        filename = paste(params$study, "chromhmm", sep="_")
-      ),
-      list(
-        extend = "excel",
-        filename = paste(params$study, "chromhmm", sep="_")
-      ),
-      list(
-        extend = "pdf",
-        filename = paste(params$study, "chromhmm", sep="_")
-      ),
-      list(
-        extend = "print"
+  datatable(
+    overlap_df,
+    rownames = FALSE,
+    extensions = "Buttons",
+    options = list(
+      dom = "Bfrtip",
+      buttons = list(
+        list(
+          extend = "copy"
+        ),
+        list(
+          extend = "csv",
+          filename = paste(params$study, "chromhmm", sep="_")
+        ),
+        list(
+          extend = "excel",
+          filename = paste(params$study, "chromhmm", sep="_")
+        ),
+        list(
+          extend = "pdf",
+          filename = paste(params$study, "chromhmm", sep="_")
+        ),
+        list(
+          extend = "print"
+        )
       )
     )
+  ) %>%
+  formatSignif(
+    columns = round_cols,
+    digits = 4
+  ) %>%
+  formatRound(
+    columns = bp_cols,
+    digits = 0,
+    interval = NULL
   )
-) %>%
-formatSignif(
-  columns = round_cols,
-  digits = 4
-) %>%
-formatRound(
-  columns = bp_cols,
-  digits = 0,
-  interval = NULL
-)
+}
 ```
 
 ## ENCODE cCRE
 
-```{r ccre, eval=mouse_or_human}
+```{r ccre, eval=run_dmr_annotation}
 
 # Load cCRE annotation
 ccre_df <- read.table(
@@ -1517,63 +1523,67 @@ https://screen.encodeproject.org/ all mouse cCREs (mm10) Registry of cCREs V3
 **(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with cCRE annotations.  
 Note: a single DMR may have multiple cCRE annotations.
 
-```{r ccre_plot, fig.height=10, fig.width=13, eval=mouse_or_human}
-ggplot(overlap_df, aes(x=class)) +
-  geom_bar(fill = "#1c3f74") + 
-  th + 
-  labs(
-    x = "cCRE classificaiton",
-  ) +
-  coord_flip()
+```{r ccre_plot, eval=run_dmr_annotation, fig.height=10, fig.width=13}
+if (count_dmr_overlap > 0) {
+  ggplot(overlap_df, aes(x=class)) +
+    geom_bar(fill = "#1c3f74") + 
+    th + 
+    labs(
+      x = "cCRE classificaiton",
+    ) +
+    coord_flip()
+}
 ```
 
-```{r ccre_table, eval=mouse_or_human}
-# Display in table
-round_cols <- c("qvalue", "meth.diff")
-bp_cols <- c("start", "end")
+```{r ccre_table, eval=run_dmr_annotation}
+if (count_dmr_overlap > 0) {
+  # Display in table
+  round_cols <- c("qvalue", "meth.diff")
+  bp_cols <- c("start", "end")
 
-datatable(
-  overlap_df,
-  rownames = FALSE,
-  extensions = "Buttons",
-  options = list(
-    dom = "Bfrtip",
-    buttons = list(
-      list(
-        extend = "copy"
-      ),
-      list(
-        extend = "csv",
-        filename = paste(params$study, "ccre", sep="_")
-      ),
-      list(
-        extend = "excel",
-        filename = paste(params$study, "ccre", sep="_")
-      ),
-      list(
-        extend = "pdf",
-        filename = paste(params$study, "ccre", sep="_")
-      ),
-      list(
-        extend = "print"
+  datatable(
+    overlap_df,
+    rownames = FALSE,
+    extensions = "Buttons",
+    options = list(
+      dom = "Bfrtip",
+      buttons = list(
+        list(
+          extend = "copy"
+        ),
+        list(
+          extend = "csv",
+          filename = paste(params$study, "ccre", sep="_")
+        ),
+        list(
+          extend = "excel",
+          filename = paste(params$study, "ccre", sep="_")
+        ),
+        list(
+          extend = "pdf",
+          filename = paste(params$study, "ccre", sep="_")
+        ),
+        list(
+          extend = "print"
+        )
       )
     )
+  ) %>%
+  formatSignif(
+    columns = round_cols,
+    digits = 4
+  ) %>%
+  formatRound(
+    columns = bp_cols,
+    digits = 0,
+    interval = NULL
   )
-) %>%
-formatSignif(
-  columns = round_cols,
-  digits = 4
-) %>%
-formatRound(
-  columns = bp_cols,
-  digits = 0,
-  interval = NULL
-)
+}
 ```
 
 ## ENCODE Blacklist
 
-```{r blacklist, eval=mouse_or_human}
+```{r blacklist, eval=run_dmr_annotation}
 
 # Load ChromHMM annotation
 blacklist_gr <- rtracklayer::import(params$blacklist_path)
@@ -1603,46 +1613,48 @@ ChromHMM annotations were sourced from https://github.com/Boyle-Lab/Blacklist/bl
 **(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with blacklist annotations.  
 Note: a single DMR may have multiple blacklist annotations.
 
-```{r blacklist_table, eval=mouse_or_human}
-# Display in table
-round_cols <- c("qvalue", "meth.diff")
-bp_cols <- c("start", "end")
+```{r blacklist_table, eval=run_dmr_annotation}
+if (count_dmr_overlap > 0) {
+  # Display in table
+  round_cols <- c("qvalue", "meth.diff")
+  bp_cols <- c("start", "end")
 
-datatable(
-  overlap_df,
-  rownames = FALSE,
-  extensions = "Buttons",
-  options = list(
-    dom = "Bfrtip",
-    buttons = list(
-      list(
-        extend = "copy"
-      ),
-      list(
-        extend = "csv",
-        filename = paste(params$study, "blacklist", sep="_")
-      ),
-      list(
-        extend = "excel",
-        filename = paste(params$study, "blacklist", sep="_")
-      ),
-      list(
-        extend = "pdf",
-        filename = paste(params$study, "blacklist", sep="_")
-      ),
-      list(
-        extend = "print"
+  datatable(
+    overlap_df,
+    rownames = FALSE,
+    extensions = "Buttons",
+    options = list(
+      dom = "Bfrtip",
+      buttons = list(
+        list(
+          extend = "copy"
+        ),
+        list(
+          extend = "csv",
+          filename = paste(params$study, "blacklist", sep="_")
+        ),
+        list(
+          extend = "excel",
+          filename = paste(params$study, "blacklist", sep="_")
+        ),
+        list(
+          extend = "pdf",
+          filename = paste(params$study, "blacklist", sep="_")
+        ),
+        list(
+          extend = "print"
+        )
       )
     )
+  ) %>%
+  formatSignif(
+    columns = round_cols,
+    digits = 4
+  ) %>%
+  formatRound(
+    columns = bp_cols,
+    digits = 0,
+    interval = NULL
   )
-) %>%
-formatSignif(
-  columns = round_cols,
-  digits = 4
-) %>%
-formatRound(
-  columns = bp_cols,
-  digits = 0,
-  interval = NULL
-)
+}
 ```
