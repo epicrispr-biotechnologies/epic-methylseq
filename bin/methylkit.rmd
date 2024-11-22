@@ -159,11 +159,11 @@ myobj=methRead(cov_files,
                 treatment=treatment,
                 context="CpG",
                 dbtype = "tabix",
-                dbdir = "methylDB",
+                dbdir = paste0(params$out_path, "/", "methylDB"),
                 header = FALSE
 )
 # Merging all samples into one file. This is needed as precursor for dmc analyses  
-meth=invisible(methylKit::unite(myobj, destrand=FALSE))
+meth=methylKit::unite(myobj, destrand=FALSE)
 ```
 
 ```{r tiling_window_analysis, echo=FALSE}
@@ -175,7 +175,7 @@ invisible(capture.output({tile.obj = tileMethylCounts(myobj,win.size=100,step.si
 # meth.tile=methylKit::unite(tile.obj, destrand=FALSE, min.per.group = 2L) 
 
 # In this version of the code we are requiring all samples to have a methylation site for it to be included in the comparative analyses.
-meth.tile=invisible(methylKit::unite(tile.obj, destrand=FALSE))
+meth.tile=methylKit::unite(tile.obj, destrand=FALSE)
 ```
 
 # Dataset overview
