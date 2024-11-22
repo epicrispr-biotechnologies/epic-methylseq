@@ -670,6 +670,7 @@ applyTbxByChunk<-function(tbxFile,chunk.size=1e6,dir,filename,
 .distancePlot <- function(mat, metadata) {
   sampleDists <- dist(t(mat))
   sampleDistMatrix <- as.matrix(sampleDists)
+  diag(sampleDistMatrix) <- NA
   colors <- colorRampPalette(rev(brewer.pal(9, "Blues")) )(255)
 
   df <- metadata[,c("condition", "sample")]
@@ -680,7 +681,8 @@ applyTbxByChunk<-function(tbxFile,chunk.size=1e6,dir,filename,
     col=colors,
     annotation_col=df,
     cluster_rows=TRUE,
-    cluster_cols=TRUE
+    cluster_cols=TRUE,
+    na_col = "grey"
   )
 }
 
@@ -1303,11 +1305,17 @@ nearest_hits <- distanceToNearest(dmrs_gr, tss_gr)
 distances <- mcols(nearest_hits)
 
 # Aggregate nearest gene information
+dmrs_overlap <- dmrs_df[queryHits(nearest_hits),]
 nearest_genes <- as.data.frame(tss_gr[subjectHits(nearest_hits)])
 nearest_genes <- nearest_genes[c("gene_id", "gene_name", "gene_biotype")]
 colnames(nearest_genes) <- gsub("_", ".", colnames(nearest_genes))
-nearest_genes_df <- cbind(dmrs_df, nearest_genes, distances)
+nearest_genes_df <- cbind(dmrs_overlap, nearest_genes, distances)
+
+count_dmr_overlap <- length(unique(queryHits(nearest_hits)))
 ```
+
+**`r count_dmr_overlap` / `r total_sig_dmrs`** 
+**(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs have a nearest gene annotation.  
 
 ```{r nearest_gene_plot, eval=run_dmr_annotation, fig.height=10, fig.width=13}
 ggplot(nearest_genes_df, aes(x=distance)) +
@@ -1411,11 +1419,15 @@ ChromHMM annotations were sourced from https://github.com/ernstlab/mouse_fullSta
 **(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with ChromHMM annotations.  
 Note: a single DMR may have multiple ChromHMM annotations.
 
-```{r chromhmm_plot, eval=run_dmr_annotation, fig.height=10, fig.width=13}
+```{r chromhmm_plot, eval=run_dmr_annotation, fig.height=10, fig.width=16}
 if (count_dmr_overlap > 0) {
   ggplot(overlap_df, aes(x=ChromHMM.state)) +
     geom_bar(fill = "#1c3f74") + 
     th + 
+    theme(
+      axis.text.x = element_text(size=14),
+      axis.text.y = element_text(size=14)
+    ) +
     labs(
       x = "ChromHMM state",
     ) +
