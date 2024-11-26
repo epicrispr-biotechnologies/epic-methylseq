@@ -160,7 +160,8 @@ myobj=methRead(cov_files,
                 context="CpG",
                 dbtype = "tabix",
                 dbdir = paste0(params$out_path, "/", "methylDB"),
-                header = FALSE
+                header = FALSE,
+                mincov = 3
 )
 # Merging all samples into one file. This is needed as precursor for dmc analyses  
 meth=methylKit::unite(myobj, destrand=FALSE)
@@ -292,17 +293,17 @@ datatable(
   colnames = c(
     "sample",
     "condition",
-    "10X CpG",
-    "10X CpG %",
-    "10X Tile",
-    "10X Tile %"
+    "3X CpG",
+    "3X CpG %",
+    "3X Tile",
+    "3X Tile %"
   ),
   caption= htmltools::tags$caption(
     style = 'caption-side: bottom;',  
-    "10X CpG = Number of CpGs with at least 10X coverage.", htmltools::tags$br(),  
-    "10X CpG % = Percentage of CpGs with at least 10X coverage of total CpGs.", htmltools::tags$br(), 
-    "10X Tile = Number of tiles with at least 5 CpGs each with at least 10X coverage.", htmltools::tags$br(), 
-    "10X Tile % = Percentage of tiles with at least 5 CpGs each with at least 10X coverage of total tiles."
+    "3X CpG = Number of CpGs with at least 3X coverage.", htmltools::tags$br(),  
+    "3X CpG % = Percentage of CpGs with at least 3X coverage of total CpGs.", htmltools::tags$br(), 
+    "3X Tile = Number of tiles with at least 5 CpGs each with at least 3X coverage.", htmltools::tags$br(), 
+    "3X Tile % = Percentage of tiles with at least 5 CpGs each with at least 3X coverage of total tiles."
   )
 ) %>% formatStyle(
   columns="percent_cpg",
@@ -327,25 +328,25 @@ unite_percent_cpg <- round((meth@num.records / genome_cpg_cnt) * 100, 2)
 unite_percent_tile <- round((meth.tile@num.records / genome_tile_cnt) * 100, 2)
 
 if (unite_percent_cpg >= 75) {
-  cat("CpGs with at least 10X coverage in all samples:") 
+  cat("CpGs with at least 3X coverage in all samples:") 
   cat(format(meth@num.records, big.mark = ","))
-  cat("\n\nPercentage of CpGs with at least 10X coverage in all samples of total CpGs:    ")
+  cat("\n\nPercentage of CpGs with at least 3X coverage in all samples of total CpGs:    ")
   cat(paste0(unite_percent_cpg, "%"))
 } else {
-  cat("CpGs with at least 10X coverage in all samples: ")
+  cat("CpGs with at least 3X coverage in all samples: ")
   cat(paste0("<span style='color: red;'>", format(meth@num.records, big.mark = ",") , "</span>"))
-  cat("\n\nPercentage of CpGs with at least 10X coverage in all samples of total CpGs:    ")
+  cat("\n\nPercentage of CpGs with at least 3X coverage in all samples of total CpGs:    ")
   cat(paste0("<span style='color: red;'>", unite_percent_cpg , "%</span>"))
 }
 if (unite_percent_tile >= 75) {
-  cat("\n\nTiles with at least 5 CpGs each with at least 10X coverage in all samples:    ") 
+  cat("\n\nTiles with at least 5 CpGs each with at least 3X coverage in all samples:    ") 
   cat(format(meth.tile@num.records, big.mark = ","))
-  cat("\n\nPercentage of tiles with at least 5 CpGs each with at least 10X coverage in all samples of total tiles:    ")
+  cat("\n\nPercentage of tiles with at least 5 CpGs each with at least 3X coverage in all samples of total tiles:    ")
   cat(paste0(unite_percent_tile, "%"))
 } else {
-  cat("\n\nTiles with at least 5 CpGs each with at least 10X coverage in all samples:    ") 
+  cat("\n\nTiles with at least 5 CpGs each with at least 3X coverage in all samples:    ") 
   cat(paste0("<span style='color: red;'>", format(meth.tile@num.records, big.mark = ",") , "</span>"))
-  cat("\n\nPercentage of tiles with at least 5 CpGs each with at least 10X coverage in all samples of total tiles:    ")
+  cat("\n\nPercentage of tiles with at least 5 CpGs each with at least 3X coverage in all samples of total tiles:    ")
   cat(paste0("<span style='color: red;'>", unite_percent_tile , "%</span>"))
 }
 ```
