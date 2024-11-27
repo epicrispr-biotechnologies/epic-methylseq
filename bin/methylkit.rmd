@@ -164,19 +164,19 @@ myobj=methRead(cov_files,
                 mincov = 3
 )
 # Merging all samples into one file. This is needed as precursor for dmc analyses  
-meth=methylKit::unite(myobj, destrand=FALSE)
+meth=methylKit::unite(myobj, destrand=FALSE, mc.cores=25)
 ```
 
 ```{r tiling_window_analysis, echo=FALSE}
 
 # converting my.obj to tile object for sliding 100 bp windows minimum coverage of 5 CpGs 
-invisible(capture.output({tile.obj = tileMethylCounts(myobj,win.size=100,step.size=100,cov.bases=5)}))
+invisible(capture.output({tile.obj = tileMethylCounts(myobj,win.size=100,step.size=100,cov.bases=5, mc.cores=25)}))
 
 # in this version of the code we only required 2 out of the 3 total merged samples (one sample per patient source) to contain a methylation site for it to be included in the comparative analyses if min.per.group is not specified default is all samples must have a specific CpG site or meth tile covered to include it. 
 # meth.tile=methylKit::unite(tile.obj, destrand=FALSE, min.per.group = 2L) 
 
 # In this version of the code we are requiring all samples to have a methylation site for it to be included in the comparative analyses.
-meth.tile=methylKit::unite(tile.obj, destrand=FALSE)
+meth.tile=methylKit::unite(tile.obj, destrand=FALSE, mc.cores=25)
 ```
 
 # Dataset overview
@@ -941,9 +941,9 @@ Euclidean distances between samples in tile % methylation matrix.
 ```{r diff_meth_cpg}
 
 ## Finding differentially methylated CpGs 
-myDiff=calculateDiffMeth(meth)
+myDiff=calculateDiffMeth(meth, mc.cores=25)
 # find DMRs 
-myDiff.tile=calculateDiffMeth(meth.tile)
+myDiff.tile=calculateDiffMeth(meth.tile, mc.cores=25)
 
 # Extracting data from the methylDiff objects and coverting to dataframes
 meth.dmc <- getData(myDiff) 
