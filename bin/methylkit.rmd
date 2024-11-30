@@ -264,8 +264,8 @@ datatable(
 ## Sample overview
 
 ```{r sample_table}
-sample_cpg_cnts <- sapply(myobj, function(x) x@num.records)
-sample_tile_cnts <- sapply(tile.obj, function(x) x@num.records)
+sample_cpg_cnts <- sapply(myobj, function(x) nrow(x))
+sample_tile_cnts <- sapply(tile.obj, function(x) nrow(x))
 
 percent_cpg <- (sample_cpg_cnts / genome_cpg_cnt) * 100
 percent_tile <- (sample_tile_cnts / genome_tile_cnt) * 100
@@ -325,28 +325,28 @@ datatable(
 CpGs and tiles must meet coverage requirements in all samples to be included in analysis.
 
 ```{r coverage_stats, results="asis"}
-unite_percent_cpg <- round((meth@num.records / genome_cpg_cnt) * 100, 2)
-unite_percent_tile <- round((meth.tile@num.records / genome_tile_cnt) * 100, 2)
+unite_percent_cpg <- round((nrow(meth) / genome_cpg_cnt) * 100, 2)
+unite_percent_tile <- round((nrow(meth_tile) / genome_tile_cnt) * 100, 2)
 
 if (unite_percent_cpg >= 75) {
   cat("CpGs with at least 3X coverage in all samples:") 
-  cat(format(meth@num.records, big.mark = ","))
+  cat(format(nrow(meth), big.mark = ","))
   cat("\n\nPercentage of CpGs with at least 3X coverage in all samples of total CpGs:    ")
   cat(paste0(unite_percent_cpg, "%"))
 } else {
   cat("CpGs with at least 3X coverage in all samples: ")
-  cat(paste0("<span style='color: red;'>", format(meth@num.records, big.mark = ",") , "</span>"))
+  cat(paste0("<span style='color: red;'>", format(nrow(meth), big.mark = ",") , "</span>"))
   cat("\n\nPercentage of CpGs with at least 3X coverage in all samples of total CpGs:    ")
   cat(paste0("<span style='color: red;'>", unite_percent_cpg , "%</span>"))
 }
 if (unite_percent_tile >= 75) {
   cat("\n\nTiles with at least 5 CpGs each with at least 3X coverage in all samples:    ") 
-  cat(format(meth.tile@num.records, big.mark = ","))
+  cat(format(nrow(meth.tile), big.mark = ","))
   cat("\n\nPercentage of tiles with at least 5 CpGs each with at least 3X coverage in all samples of total tiles:    ")
   cat(paste0(unite_percent_tile, "%"))
 } else {
   cat("\n\nTiles with at least 5 CpGs each with at least 3X coverage in all samples:    ") 
-  cat(paste0("<span style='color: red;'>", format(meth.tile@num.records, big.mark = ",") , "</span>"))
+  cat(paste0("<span style='color: red;'>", format(nrow(meth.tile), big.mark = ",") , "</span>"))
   cat("\n\nPercentage of tiles with at least 5 CpGs each with at least 3X coverage in all samples of total tiles:    ")
   cat(paste0("<span style='color: red;'>", unite_percent_tile , "%</span>"))
 }
