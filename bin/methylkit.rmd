@@ -789,43 +789,43 @@ setMethod("myPCASamples", "methylBase",
   function(.Object, screeplot, adj.lim, scale, center, comp,
                              transpose, sd.filter, sd.threshold,
                              filterByQuantile, obj.return, condition)
-  {
+{
     
-    mat      = getData(.Object)
-    # remove rows containing NA values, they might be introduced at unite step
-    mat      = mat[ rowSums(is.na(mat))==0, ] 
-    meth.mat = mat[, .Object@numCs.index]/
-      (mat[,.Object@numCs.index] + mat[,.Object@numTs.index] )                                      
-    names(meth.mat)=.Object@sample.ids
+  mat      = getData(.Object)
+  # remove rows containing NA values, they might be introduced at unite step
+  mat      = mat[ rowSums(is.na(mat))==0, ] 
+  meth.mat = mat[, .Object@numCs.index]/
+    (mat[,.Object@numCs.index] + mat[,.Object@numTs.index] )                                      
+  names(meth.mat)=.Object@sample.ids
     
-    # if Std. Dev. filter is on remove rows with low variation
-    if(sd.filter){
-      if(filterByQuantile){
-        sds=rowSds(as.matrix(meth.mat))
-        cutoff=quantile(sds,sd.threshold)
-        meth.mat=meth.mat[sds>cutoff,]
-      }else{
-        meth.mat=meth.mat[rowSds(as.matrix(meth.mat))>sd.threshold,]
-      }
-    }
-    
-    if(transpose){
-      .myPcaPlotT(meth.mat,comp1=comp[1],comp2=comp[2],screeplot=screeplot, 
-                adj.lim=adj.lim, 
-                treatment=condition,sample.ids=.Object@sample.ids,
-                context=.Object@context
-                ,scale=scale,center=center,obj.return=obj.return)
-      
+  # if Std. Dev. filter is on remove rows with low variation
+  if(sd.filter){
+    if(filterByQuantile){
+      sds=rowSds(as.matrix(meth.mat))
+      cutoff=quantile(sds,sd.threshold)
+      meth.mat=meth.mat[sds>cutoff,]
     }else{
-      # We will never use the non transpose version, leaving it here for reference
-      .myPcaPlot(meth.mat,comp1=comp[1],comp2=comp[2],screeplot=screeplot, 
-               adj.lim=adj.lim, 
-               treatment=.Object@treatment,sample.ids=.Object@sample.ids,
-               context=.Object@context,
-               scale=scale,center=center,  obj.return=obj.return)
+      meth.mat=meth.mat[rowSds(as.matrix(meth.mat))>sd.threshold,]
     }
+  }
     
-  }      
+  if(transpose){
+    .myPcaPlotT(meth.mat,comp1=comp[1],comp2=comp[2],screeplot=screeplot,
+      adj.lim=adj.lim, 
+      treatment=condition,sample.ids=.Object@sample.ids,
+      context=.Object@context,
+      scale=scale,center=center,obj.return=obj.return)
+      
+  }else{
+    # We will never use the non transpose version, leaving it here for reference
+    .myPcaPlot(meth.mat,comp1=comp[1],comp2=comp[2],screeplot=screeplot, 
+      adj.lim=adj.lim, 
+      treatment=.Object@treatment,sample.ids=.Object@sample.ids,
+      context=.Object@context,
+      scale=scale,center=center,  obj.return=obj.return)
+  }
+  return(meth.mat)
+}      
 )
 
 #' @rdname PCASamples-methods
