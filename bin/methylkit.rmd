@@ -90,7 +90,7 @@ library(MASS)
 library(viridis)
 
 # Specify number of cores to use
-cores <- 80
+cores <- 50
 ```
 
 ```{r read_metadata}
@@ -162,16 +162,25 @@ myobj=methRead(cov_files,
                 treatment=treatment,
                 context="CpG",
                 header = FALSE,
-                mincov = 3
+                mincov = 10
 )
 # Merging all samples into one file. This is needed as precursor for dmc analyses  
 meth=methylKit::unite(myobj, destrand=FALSE, mc.cores=cores)
 ```
 
 ```{r tiling_window_analysis, echo=FALSE}
-
-# converting my.obj to tile object for sliding 100 bp windows minimum coverage of 5 CpGs 
-invisible(capture.output({tile.obj = tileMethylCounts(myobj,win.size=100,step.size=100,cov.bases=5, mc.cores=cores)}))
+# create a lower coverage methylobject for tiling analysis
+myobj_low_cov=methRead(cov_files,
+                sample.id=as.list(metadata$sample),
+                pipeline="bismarkCoverage",
+                assembly=params$assembly,
+                treatment=treatment,
+                context="CpG",
+                header = FALSE,
+                mincov = 3
+)
+# converting myobj_low_cov to tile object for sliding 100 bp windows minimum coverage of 5 CpGs 
+invisible(capture.output({tile.obj = tileMethylCounts(myobj_low_cov,win.size=100,step.size=100,cov.bases=5, mc.cores=cores)}))
 
 # in this version of the code we only required 2 out of the 3 total merged samples (one sample per patient source) to contain a methylation site for it to be included in the comparative analyses if min.per.group is not specified default is all samples must have a specific CpG site or meth tile covered to include it. 
 # meth.tile=methylKit::unite(tile.obj, destrand=FALSE, min.per.group = 2L) 
@@ -294,24 +303,24 @@ datatable(
   colnames = c(
     "sample",
     "condition",
-    "3X CpG",
-    "3X CpG %",
+    "10X CpG",
+    "10X CpG %",
     "3X Tile",
     "3X Tile %"
   ),
   caption= htmltools::tags$caption(
     style = 'caption-side: bottom;',  
-    "3X CpG = Number of CpGs with at least 3X coverage.", htmltools::tags$br(),  
-    "3X CpG % = Percentage of CpGs with at least 3X coverage of total CpGs.", htmltools::tags$br(), 
+    "10X CpG = Number of CpGs with at least 10X coverage.", htmltools::tags$br(),  
+    "10X CpG % = Percentage of CpGs with at least 10X coverage of total CpGs.", htmltools::tags$br(), 
     "3X Tile = Number of tiles with at least 5 CpGs each with at least 3X coverage.", htmltools::tags$br(), 
     "3X Tile % = Percentage of tiles with at least 5 CpGs each with at least 3X coverage of total tiles."
   )
 ) %>% formatStyle(
   columns="percent_cpg",
-  backgroundColor = styleInterval(75, c('#ff4545', 'white'))
+  backgroundColor = styleInterval(50, c('#ff4545', 'white'))
 ) %>% formatStyle(
   columns="percent_tile",
-  backgroundColor = styleInterval(75, c('#ff4545', 'white'))
+  backgroundColor = styleInterval(50, c('#ff4545', 'white'))
 ) %>% formatRound(
   columns = round_cols,
   digits = 2
@@ -326,20 +335,20 @@ CpGs and tiles must meet coverage requirements in all samples to be included in 
 
 ```{r coverage_stats, results="asis"}
 unite_percent_cpg <- round((nrow(meth) / genome_cpg_cnt) * 100, 2)
-unite_percent_tile <- round((nrow(meth_tile) / genome_tile_cnt) * 100, 2)
+unite_percent_tile <- round((nrow(meth.tile) / genome_tile_cnt) * 100, 2)
 
-if (unite_percent_cpg >= 75) {
-  cat("CpGs with at least 3X coverage in all samples:") 
+if (unite_percent_cpg >= 50) {
+  cat("CpGs with at least 10X coverage in all samples:") 
   cat(format(nrow(meth), big.mark = ","))
-  cat("\n\nPercentage of CpGs with at least 3X coverage in all samples of total CpGs:    ")
+  cat("\n\nPercentage of CpGs with at least 10X coverage in all samples of total CpGs:    ")
   cat(paste0(unite_percent_cpg, "%"))
 } else {
-  cat("CpGs with at least 3X coverage in all samples: ")
+  cat("CpGs with at least 10X coverage in all samples: ")
   cat(paste0("<span style='color: red;'>", format(nrow(meth), big.mark = ",") , "</span>"))
-  cat("\n\nPercentage of CpGs with at least 3X coverage in all samples of total CpGs:    ")
+  cat("\n\nPercentage of CpGs with at least 10X coverage in all samples of total CpGs:    ")
   cat(paste0("<span style='color: red;'>", unite_percent_cpg , "%</span>"))
 }
-if (unite_percent_tile >= 75) {
+if (unite_percent_tile >= 50) {
   cat("\n\nTiles with at least 5 CpGs each with at least 3X coverage in all samples:    ") 
   cat(format(nrow(meth.tile), big.mark = ","))
   cat("\n\nPercentage of tiles with at least 5 CpGs each with at least 3X coverage in all samples of total tiles:    ")
@@ -351,6 +360,592 @@ if (unite_percent_tile >= 75) {
   cat(paste0("<span style='color: red;'>", unite_percent_tile , "%</span>"))
 }
 ```
+
+# PCA
+
+```{r pca, echo=FALSE, message=FALSE}
+# Adjust the range of a vector "x" by "i" proportion of the range of x
+# 
+# @param x a vector of value
+# @param i the proprotion of the range of x to adjust the size.
+.adjlim=function(x, i)
+  {
+  if(length(x)>1) {
+    xr=range(x); 
+    xlim=c(); 
+    xlim[1]=xr[1] - abs(xr[1]) * i; 
+    xlim[2]=xr[2] + abs(xr[2] * i); 
+    return(xlim)} 
+  else 
+    print("length vector x should be more than 1")
+  }
+
+rowSds <- function(x, center=NULL, ...) {
+  n <- !is.na(x);
+  n <- rowSums(n);
+  n[n <= 1] <- NA;
+
+  if (is.null(center)) {
+    center <- rowMeans(x, ...);
+  }
+
+  x <- x - center;
+  x <- x*x;
+  x <- rowSums(x, ...);
+  x <- x/(n-1);
+
+ sqrt(x);
+}
+
+#' convert methylKit tabix to data.frame
+# assuming you get a list length 1
+#' @noRd
+tabix2df<-function(tabixRes){
+
+    data.table::fread( paste0(paste(tabixRes[[1]],collapse="\n"),"\n" ),
+                       stringsAsFactors=FALSE,data.table = FALSE)
+    
+}
+
+#' get data from already opened tabixfile for a given chunkSize
+#'
+# @example
+# tbxFile=methylRawListDB[[1]]@dbpath
+#  getTabixByChunk( tbxFile,chunk.size=10)
+#' @noRd
+getTabixByChunk<-function(tbxFile,chunk.size=1e6,
+                          return.type=c("data.table","data.frame","GRanges")){
+  
+  return.type <- match.arg(return.type)
+  
+  if( class(tbxFile) != "TabixFile" | !Rsamtools::isOpen(tbxFile, rw="read") ){
+    stop("tbxFile has to be a class of TabixFile and should be open for reading ")
+  }
+  
+  if(is.na(Rsamtools::yieldSize(tbxFile)) | is.numeric(chunk.size)  ){
+    Rsamtools::yieldSize(tbxFile)<-chunk.size
+  }
+  
+  res <- Rsamtools::scanTabix(tbxFile)
+  if(length(res) == 1 & length(res[[1]]) == 0)
+    stop("the tabix file seems to be empty. stopping here.")
+  
+  if(return.type=="data.table")
+  {
+    tabix2dt(res)
+  }else if (return.type=="data.frame"){
+    tabix2df(res)
+  }else {
+    tabix2gr(res)
+  }
+}
+
+# applyTbxByChunk
+#' Serially apply a function on chunks of tabix files
+#' 
+#' The function reads chunks of a tabix file and applies a function on them. 
+#' The function (FUN argument) should apply on data.frames and 
+#' return a data frame
+#' as a result. The function is serially applied to chunks 
+#' (means no parallelization). 
+#' However, the function FUN itself can be a parallelized function
+#' and related arguments could be passed on to the function via ... argument.
+#' 
+#' @param tbxFile tabix file to read. a TabixFile object
+#' @param chunk.size number of rows to be taken as a chunk, default: 1e6
+#' @param return.type indicates the return type for the function
+#' @param FUN function to apply to chunks, it takes a data.frame and returns a 
+#'            data.frame. First argument of the function should be a data frame
+#' @param ... parameters to be passed to FUN. 
+#' @param dir directory to create temporary files and the resulting tabix file
+#' @param filename the filename for the resulting tabix file, this should not be 
+#' a path, just a file name.
+#' @param tabixHead optional header to prepend to the file
+#'
+#' @return either a path to a tabix or text file, or a data frame or data.table
+#' @noRd
+applyTbxByChunk<-function(tbxFile,chunk.size=1e6,dir,filename,
+                          return.type=c("tabix","data.frame","data.table","text"),
+                          FUN,...,tabixHead=NULL,textHeader=NULL){
+  
+  return.type <- match.arg(return.type)
+  FUN <- match.fun(FUN)
+  
+  # open tabix file with given chunk size
+  if( class(tbxFile) != "TabixFile" ){
+    tbxFile <- Rsamtools::TabixFile(tbxFile, yieldSize = chunk.size)
+
+  } else {
+    if(Rsamtools::isOpen(tbxFile)){close(tbxFile)}# close if already open
+    Rsamtools::yieldSize(tbxFile) <-  chunk.size 
+  }
+  
+  
+  # calculate number of chunks
+  recs=Rsamtools::countTabix(tbxFile)[[1]]
+  chunk.num=ceiling(recs/chunk.size)
+  
+  open(tbxFile)
+  
+  if(return.type =="tabix"){
+    
+    # create a custom function that contains the function
+    # to be applied
+    myFunc<-function(chunk.num,tbxFile,dir,filename,FUN,...){
+      data=getTabixByChunk(tbxFile,chunk.size=NULL,return.type="data.frame")
+      res=FUN(data,...)  
+      
+      # for tabix
+      outfile= file.path(path.expand( dir),paste(chunk.num,filename,sep="_"))
+      .write.table.noSci(res,outfile,quote=FALSE,col.names=FALSE,row.names=FALSE,
+                  sep="\t")
+    }
+
+    # attach a random string to the file name 
+    rndFile=paste(sample(c(0:9, letters, LETTERS),9, replace=TRUE),collapse="")
+    filename2=paste(rndFile,filename,sep="_")
+    
+    # apply function to chunks
+    res=lapply(1:chunk.num,myFunc,tbxFile,dir,filename2,FUN,...)
+    
+    # collect & cat temp files,then make tabix
+    path <- catsub2tabix(dir,pattern=filename2,filename,sort = TRUE,tabixHead = tabixHead)
+
+    return(gsub(".tbi","",path))
+    
+  } else if(return.type =="text"){
+    
+    # create a custom function that contains the function
+    # to be applied
+    myFunc2<-function(chunk.num,tbxFile,dir,filename,FUN,...){
+      data=getTabixByChunk(tbxFile,chunk.size=NULL,return.type="data.frame")
+      res=FUN(data,...)  
+      
+      # for text
+      outfile= file.path(path.expand( dir),paste(chunk.num,filename,sep="_"))
+      .write.table.noSci(res,outfile,quote=FALSE,col.names=FALSE,row.names=FALSE,
+                  sep="\t")
+    }
+    
+    # attach a random string to the file name 
+    rndFile=paste(sample(c(0:9, letters, LETTERS),9, replace=TRUE),collapse="")
+    filename2=paste(rndFile,filename,sep="_")
+    
+    # apply function to chunks
+    res=lapply(1:chunk.num,myFunc2,tbxFile,dir,filename2,FUN,...)
+    
+    
+    outfile= file.path(path.expand(dir),filename) # get file name 
+    if(file.exists(outfile)){
+      message("overwriting ",outfile)
+      unlink(outfile)
+    }
+    con=file(outfile, open = "a", blocking = TRUE) # open connection  
+    # write header if provided
+    if(!is.null(textHeader)) 
+      write(file = con,
+            x = textHeader,
+            ncolumns = length(textHeader),
+            sep = "\t")
+    # append result files
+    for(file in gtools::mixedsort(
+      list.files(path = dir, pattern = filename2,full.names=TRUE))){
+      file.append(outfile,file) # append files
+    }
+    close(con)
+    #remove temp files
+    unlink(list.files(path = dir, pattern = filename2,full.names=TRUE))
+    
+    return(outfile)
+  
+  }else if(return.type=="data.frame"){
+    
+    # create a custom function that contains the function
+    # to be applied
+    myFunc3<-function(chunk.num,tbxFile,FUN,...){
+      data=getTabixByChunk(tbxFile,chunk.size=NULL,return.type="data.frame")
+      FUN(data,...)    
+    }
+    
+    res=lapply(1:chunk.num,myFunc3,tbxFile,FUN,...)
+    
+    # collect and return
+    data.frame(data.table::rbindlist(res))
+  }else{
+    
+    myFunc4<-function(chunk.num,tbxFile,FUN,...){
+      data=getTabixByChunk(tbxFile,chunk.size=NULL,return.type="data.table")
+      FUN(data,...)    
+    }
+    
+    res=lapply(1:chunk.num,myFunc4,tbxFile,FUN,...)
+  
+    
+    # collect and return
+    data.table::rbindlist(res)
+  }
+  
+}
+
+# Principal Components Analysis on methylBase object
+# x matrix each column is a sample
+# cor a logical value indicating whether the calculation should use the correlation matrix or the covariance matrix. (The correlation matrix can only be used if there are no constant variables.)
+.myPcaPlot = function(x,comp1=1,comp2=2, screeplot=FALSE, adj.lim=c(0.001,0.1), treatment=treatment,sample.ids=sample.ids,context,scale=TRUE,center=TRUE,obj.return=FALSE){
+  #x.pr = princomp(x, cor=cor)
+  
+
+  x.pr = prcomp((x),scale.=scale,center=center)
+
+  if (screeplot){
+    i=5;screeplot(x.pr, type="barplot", main=paste(context,"methylation PCA Screeplot"), col = rainbow(i)[i])
+  }
+  else{
+    #loads = loadings(x.pr)
+    loads = x.pr$rotation
+    treatment=treatment
+    sample.ids=sample.ids
+    my.cols=rainbow(length(unique(treatment)), start=1, end=0.6)
+
+    
+    plot(loads[,comp1],loads[,comp2], main = paste(context,"methylation PCA Analysis"),
+         col=my.cols[treatment+1],
+         xlim=.adjlim(loads[,comp1],adj.lim[1]), 
+         ylim=.adjlim(loads[,comp2], adj.lim[2]),
+         xlab=paste("loadings for PC",comp1,sep=""), 
+         ylab=paste("loadings for PC",comp2,sep=""))
+    
+    text(loads[,comp1], loads[,comp2],labels=sample.ids,adj=c(-0.4,0.3), 
+         col=my.cols[treatment+1])
+  }
+  if(obj.return){  return((x.pr))}
+
+}
+
+
+# Principal Components Analysis on methylBase object on transposed data
+# x matrix each column is a sample
+.myPcaPlotT = function(x,comp1=1,comp2=2,screeplot=FALSE, adj.lim=c(0.001,0.1),
+                     treatment,sample.ids=sample.ids,context,
+                     scale=TRUE,center=TRUE,obj.return=FALSE){
+
+  x.pr = prcomp(t(x),scale.=scale,center=center)
+ 
+  #loads = loadings(x.pr)
+  #loads = x.pr$rotation
+  sample.ids = sample.ids
+  d <- data.frame(
+    PC1=x.pr$x[,1],
+    PC2=x.pr$x[,2],
+    condition=treatment
+  )
+  p <- ggplot(data=d, aes(x=PC1, y=PC2, color=condition)) +
+    geom_point(size=3) + 
+    coord_fixed(ratio=1,
+              xlim= c(min(d$PC1, d$PC2), max(d$PC1, d$PC2)),
+              ylim= c(min(d$PC1, d$PC2), max(d$PC1, d$PC2))
+              ) + 
+    geom_text(aes(label=rownames(d)), hjust=0, vjust=0, show.legend=FALSE) + 
+    theme(
+      axis.title=element_text(size=18),
+      axis.text=element_text(size=12),
+      legend.title=element_text(size=18),
+      legend.text=element_text(size=12)
+    )
+  print(p)
+  
+  if(obj.return){  return((x.pr))}
+}
+
+.screePlot <- function(mat){
+  pca = prcomp(t(mat),scale.=TRUE,center=TRUE)
+  # the contribution to the total variance for each component
+  percentVar <- pca$sdev^2 / sum(pca$sdev^2)
+  PC_names <- paste0("PC", 1:length(percentVar))
+  # subset to first 9 components if 10 or more
+  if (length(percentVar) > 9) {
+    percentVar <- percentVar[1:9]
+    PC_names <- PC_names[1:9]
+  }
+  scree_df <- data.frame(PC_names, percentVar)
+  # Plot the scree plot
+  p <- ggplot(scree_df, aes(x = PC_names, y = percentVar)) +
+    geom_bar(stat = "identity", fill = "#1c3f74") +
+    labs(x = "Principal component", y = "Proportion of variance explained") + 
+    theme(
+      axis.title=element_text(size=18),
+      axis.text=element_text(size=12),
+    )
+  print(p)
+}
+
+.distancePlot <- function(mat, metadata) {
+  sampleDists <- dist(t(mat))
+  sampleDistMatrix <- as.matrix(sampleDists)
+  diag(sampleDistMatrix) <- NA
+  colors <- colorRampPalette(rev(brewer.pal(9, "Blues")) )(255)
+
+  df <- metadata[,c("condition", "sample")]
+  pheatmap(
+    sampleDistMatrix,
+    clustering_distance_rows=sampleDists,
+    clustering_distance_cols=sampleDists,
+    col=colors,
+    annotation_col=df,
+    cluster_rows=TRUE,
+    cluster_cols=TRUE,
+    na_col = "grey"
+  )
+}
+
+#' Principal Components Analysis of Methylation data
+#' 
+#' The function does a PCA analysis using \code{\link[stats]{prcomp}} function 
+#' using percent methylation matrix as an input.
+#' 
+#' @param .Object a \code{methylBase} or \code{methylBaseDB} object
+#' @param screeplot a logical value indicating whether to plot the variances 
+#'        against the number of the principal component. (default: FALSE)
+#' @param adj.lim a vector indicating the propotional adjustment of 
+#'        xlim (adj.lim[1]) and 
+#'        ylim (adj.lim[2]). This is primarily used for adjusting the visibility
+#'        of sample labels on the on the PCA plot. (default: c(0.0004,0.1))
+#' @param scale logical indicating if \code{prcomp} should scale the data to 
+#'        have unit variance or not (default: TRUE)
+#' @param center logical indicating if \code{prcomp} should center the data 
+#'        or not (default: TRUE)
+#' @param comp vector of integers with 2 elements specifying which components 
+#'        to be plotted.
+#' @param transpose if TRUE (default) percent methylation matrix will be 
+#'        transposed, this is equivalent to doing PCA on variables that are 
+#'        regions/bases. The resulting plot will location of samples in the new 
+#'        coordinate system if FALSE the variables for the matrix will be samples 
+#'        and the resulting plot whill show how each sample (variable) 
+#'        contributes to the principle component.the samples that are highly 
+#'        correlated should have similar contributions to the principal components.       
+#' @param sd.filter  If \code{TRUE}, the bases/regions with low variation will 
+#'        be discarded prior to PCA (default:TRUE)
+#' @param sd.threshold A numeric value. If \code{filterByQuantile} is \code{TRUE}, 
+#'        the value should be between 0 and 1 and the features whose standard 
+#'        deviations is less than the quantile denoted by \code{sd.threshold} 
+#'        will be removed. If \code{filterByQuantile} is \code{FALSE}, 
+#'        then features whose standard deviations is less than the value 
+#'        of \code{sd.threshold} will be removed.(default:0.5)
+#' @param filterByQuantile A logical determining if \code{sd.threshold} is to be 
+#'        interpreted as a quantile of all standard deviation values from 
+#'        bases/regions (the default), or as an absolute value
+#' @param obj.return if the result of \code{prcomp} function should be returned 
+#'        or not. (Default:FALSE)
+#' @param chunk.size Number of rows to be taken as a chunk for processing the 
+#' \code{methylRawListDB} objects, default: 1e6
+#' @param condition a vector of conditions for each sample
+#' 
+#' @usage PCASamples(.Object, screeplot=FALSE, adj.lim=c(0.0004,0.1), scale=TRUE,
+#' center=TRUE,comp=c(1,2),transpose=TRUE,sd.filter=TRUE,
+#'            sd.threshold=0.5,filterByQuantile=TRUE,obj.return=FALSE,chunk.size,condition)
+#' 
+#' @examples
+#' data(methylKit) 
+#' 
+#' # do PCA with filtering rows with low variation, filter rows with standard 
+#' # deviation lower than the 50th percentile of Standard deviation distribution
+#' PCASamples(methylBase.obj,screeplot=FALSE, adj.lim=c(0.0004,0.1),
+#'            scale=TRUE,center=TRUE,comp=c(1,2),transpose=TRUE,sd.filter=TRUE,
+#'            sd.threshold=0.5,filterByQuantile=TRUE,obj.return=FALSE)
+#' 
+#' @section Details:
+#' The parameter \code{chunk.size} is only used when working with 
+#' \code{methylBaseDB} objects, 
+#' as they are read in chunk by chunk to enable processing large-sized 
+#' objects which are stored as flat file database.
+#' Per default the chunk.size is set to 1M rows, which should work for most 
+#' systems. If you encounter memory problems or 
+#' have a high amount of memory available feel free to adjust the 
+#' \code{chunk.size}.
+#' 
+#' @return The form of the value returned by \code{PCASamples} is the summary 
+#'         of principal component analysis by \code{prcomp}.
+#' @note cor option is not in use anymore, since \code{prcomp} is used for PCA 
+#'        analysis instead of \code{princomp}
+#'  
+#'
+#' @export
+#' @docType methods
+#' @rdname PCASamples-methods
+invisible(
+  setGeneric("myPCASamples", function(.Object, screeplot=FALSE, 
+                                  adj.lim=c(0.0004,0.1),
+                                  scale=TRUE,center=TRUE,comp=c(1,2),
+                                  transpose=TRUE,
+                                  sd.filter=TRUE,sd.threshold=0.5,
+                                  filterByQuantile=TRUE,obj.return=FALSE,
+                                  chunk.size=1e6,condition) 
+          standardGeneric("myPCASamples"))
+)
+#' We will never use the methylBase method and always use methylBaseDB method
+#' leaving it here for reference
+#' @rdname PCASamples-methods
+#' @aliases PCASamples,methylBase-method
+setMethod("myPCASamples", "methylBase",
+  function(.Object, screeplot, adj.lim, scale, center, comp,
+                             transpose, sd.filter, sd.threshold,
+                             filterByQuantile, obj.return, condition)
+  {
+    
+    mat      = getData(.Object)
+    # remove rows containing NA values, they might be introduced at unite step
+    mat      = mat[ rowSums(is.na(mat))==0, ] 
+    meth.mat = mat[, .Object@numCs.index]/
+      (mat[,.Object@numCs.index] + mat[,.Object@numTs.index] )                                      
+    names(meth.mat)=.Object@sample.ids
+    
+    # if Std. Dev. filter is on remove rows with low variation
+    if(sd.filter){
+      if(filterByQuantile){
+        sds=rowSds(as.matrix(meth.mat))
+        cutoff=quantile(sds,sd.threshold)
+        meth.mat=meth.mat[sds>cutoff,]
+      }else{
+        meth.mat=meth.mat[rowSds(as.matrix(meth.mat))>sd.threshold,]
+      }
+    }
+    
+    if(transpose){
+      .myPcaPlotT(meth.mat,comp1=comp[1],comp2=comp[2],screeplot=screeplot, 
+                adj.lim=adj.lim, 
+                treatment=condition,sample.ids=.Object@sample.ids,
+                context=.Object@context
+                ,scale=scale,center=center,obj.return=obj.return)
+      
+    }else{
+      # We will never use the non transpose version, leaving it here for reference
+      .myPcaPlot(meth.mat,comp1=comp[1],comp2=comp[2],screeplot=screeplot, 
+               adj.lim=adj.lim, 
+               treatment=.Object@treatment,sample.ids=.Object@sample.ids,
+               context=.Object@context,
+               scale=scale,center=center,  obj.return=obj.return)
+    }
+    
+  }      
+)
+
+#' @rdname PCASamples-methods
+#' @aliases PCASamples,methylBaseDB-method
+setMethod("myPCASamples", "methylBaseDB",
+          function(.Object, screeplot, adj.lim,scale,center,comp,
+                   transpose,sd.filter, sd.threshold, 
+                   filterByQuantile,obj.return,chunk.size,condition)
+{
+  
+  getMethMat <- function(mat,numCs.index,numTs.index,sd.filter, 
+                         sd.threshold, filterByQuantile){
+    
+    # remove rows containing NA values, they might be introduced at unite step
+    mat      =mat[ rowSums(is.na(mat))==0, ] 
+    
+    meth.mat = mat[, numCs.index]/
+      (mat[,numCs.index] + mat[,numTs.index] )                                      
+    
+    
+    # if Std. Dev. filter is on remove rows with low variation
+    if(sd.filter){
+      if(filterByQuantile){
+        sds=rowSds(as.matrix(meth.mat))
+        cutoff=quantile(sds,sd.threshold)
+        meth.mat=meth.mat[sds>cutoff,]
+      }else{
+        meth.mat=meth.mat[rowSds(as.matrix(meth.mat))>sd.threshold,]
+      }
+    }
+    
+  }
+  
+  meth.mat <- applyTbxByChunk(.Object@dbpath,chunk.size = chunk.size,
+                              return.type = "data.frame",FUN=getMethMat,
+                              numCs.ind=.Object@numCs.index,
+                              numTs.ind=.Object@numTs.index,
+                              sd.filter=sd.filter, sd.threshold=sd.threshold, 
+                              filterByQuantile=filterByQuantile)
+  
+  names(meth.mat)=.Object@sample.ids
+  
+  if(transpose){
+    .myPcaPlotT(meth.mat,comp1=comp[1],comp2=comp[2],screeplot=screeplot, 
+              adj.lim=adj.lim, 
+              treatment=condition,sample.ids=.Object@sample.ids,
+              context=.Object@context
+              ,scale=scale,center=center,obj.return=obj.return)
+    
+  }else{
+    # We will never use the non transpose version, leaving it here for reference
+    .myPcaPlot(meth.mat,comp1=comp[1],comp2=comp[2],screeplot=screeplot, 
+             adj.lim=adj.lim, 
+             treatment=.Object@treatment,sample.ids=.Object@sample.ids,
+             context=.Object@context,
+             scale=scale,center=center,  obj.return=obj.return)
+  }
+
+  return(meth.mat)   
+}    
+)
+```
+
+## CpG
+PCA analysis on CpG % methylation matrix **X** where **X ( i , j )**
+represents the % methylation of CpG **j** in sample **i**.
+
+### Biplot
+
+```{r pca_biplot_cpg, fig.height=9, fig.width=11}
+# Run my version of PCA analysis with prettier plotting
+meth.cpg.mat <- myPCASamples(meth, condition=metadata$condition)
+```
+
+### Scree plot
+
+```{r pca_screeplot_cpg, fig.height=9, fig.width=11}
+
+.screePlot(meth.cpg.mat)
+
+```
+
+## Tile
+PCA analysis on tile % methylation matrix **X** where **X(i,j)**
+represents the % methylation of tile **j** in sample **i**.
+
+Tiles are 100 bp windows with a minimum of 5 CpGs.
+
+### Biplot
+
+```{r pca_biplot_tile, fig.height=9, fig.width=11}
+# Plot PCA biplot
+meth.tile.mat <- myPCASamples(meth.tile, condition=metadata$condition)
+```
+
+### Screeplot
+
+```{r pca_screeplot_tile, fig.height=9, fig.width=11}
+# Plot PCA screeplot
+.screePlot(meth.tile.mat)
+```
+
+# Heatmap of the sample-to-sample distances
+
+## CpG
+Euclidean distances between samples in CpG % methylation matrix.
+
+```{r, fig.height=9, fig.width=11}
+# Plot distance heatmap
+.distancePlot(meth.cpg.mat, metadata)
+```
+
+## Tile
+Euclidean distances between samples in tile % methylation matrix.
+
+```{r, fig.height=9, fig.width=11}
+# Plot distance heatmap
+.distancePlot(meth.tile.mat, metadata)
+```
+
 
 # Differentially methylated bases or regions
 
@@ -366,4 +961,725 @@ meth.dmc <- getData(myDiff)
 meth.dmr <- getData(myDiff.tile) 
 meth.dmc.df <- as.data.frame(meth.dmc)
 meth.dmr.df <- as.data.frame(meth.dmr)
+```
+
+```{r percent_methylation_cpg}
+
+perc.meth.cpg=percMethylation(meth, rowids = TRUE)
+perc.meth.cpg <- as.data.frame(perc.meth.cpg)
+perc.meth.cpg$avg_treat <- rowMeans(perc.meth.cpg[,colnames(perc.meth.cpg) %in% treated], na.rm = TRUE)
+perc.meth.cpg$avg_ctrl <- rowMeans(perc.meth.cpg[, colnames(perc.meth.cpg) %in% control], na.rm = TRUE)
+perc.meth.cpg$coord <- rownames(perc.meth.cpg)
+meth.dmc.df$coord <- paste0(meth.dmc.df$chr,".",meth.dmc.df$start,".",meth.dmc.df$end)
+perc.meth.cpg <- merge(perc.meth.cpg, meth.dmc.df, by="coord")
+
+# This is the final CpG file we want!!!! 
+write.table(
+  perc.meth.cpg,
+  file = paste0(params$out_path, "/", params$study,"_dmc.tsv"),
+  sep="\t",
+  col.names=TRUE,
+  row.names=FALSE,
+  quote=FALSE
+)
+
+# This is the final DMC file we want!!!
+perc.meth.cpg.sig <- perc.meth.cpg[perc.meth.cpg$qvalue <=0.01 & abs(perc.meth.cpg$meth.diff) > 10,]
+write.table(
+  perc.meth.cpg.sig,
+  file = paste0(params$out_path, "/", params$study,"_dmc_qval_0.01_methdiff_10.tsv"),
+  sep="\t",
+  col.names=TRUE,
+  row.names=FALSE,
+  quote=FALSE
+)
+```
+
+```{r percent_methylation_tile}
+
+perc.meth.tile=percMethylation(meth.tile, rowids = TRUE)
+perc.meth.tile <- as.data.frame(perc.meth.tile)
+perc.meth.tile$avg_treat <- rowMeans(perc.meth.tile[, colnames(perc.meth.tile) %in% treated], na.rm = TRUE)
+perc.meth.tile$avg_ctrl <- rowMeans(perc.meth.tile[, colnames(perc.meth.tile) %in% control], na.rm = TRUE)
+perc.meth.tile$coord <- rownames(perc.meth.tile)
+meth.dmr.df$coord <- paste0(meth.dmr.df$chr,".",meth.dmr.df$start,".",meth.dmr.df$end)
+perc.meth.tile <- merge(perc.meth.tile, meth.dmr.df, by="coord")
+
+# This is the final MR file we want!!!! 
+write.table(
+  perc.meth.tile,
+  file = paste0(params$out_path, "/", params$study,"_dmr.tsv"),
+  sep="\t",
+  col.names=TRUE,
+  row.names=FALSE,
+  quote=FALSE
+)
+# This is the final DMR file we want!!!!
+perc.meth.tile.sig <- perc.meth.tile[perc.meth.tile$qvalue < 0.01 & abs(perc.meth.tile$meth.diff) > 10,]
+total_sig_dmrs <- nrow(perc.meth.tile.sig)
+run_dmr_annotation <- total_sig_dmrs > 0
+
+write.table(
+  perc.meth.tile.sig,
+  file = paste0(params$out_path, "/", params$study,"_dmr_q0.01_methdiff_10.tsv"),
+  sep="\t",
+  col.names=TRUE,
+  row.names=FALSE,
+  quote=FALSE
+)
+```
+
+## CpG % methylation scatterplot
+
+All `r nrow(perc.meth.cpg)` CpGs are plotted with 
+average % methylation in `r paste0(contrast[1], " vs ", contrast[2])`.
+
+```{r cpg_scatterplot, fig.height=10, fig.width=12, dev="png"}
+
+# Using Kamil Slowikowski color points by density with ggplot2
+# https://slowkow.com/notes/ggplot2-color-by-density/
+
+# Get density of points in 2 dimensions.
+# @param x A numeric vector.
+# @param y A numeric vector.
+# @param n Create a square n by n grid to compute density.
+# @return The density within each square.
+get_density <- function(x, y, ...) {
+  dens <- MASS::kde2d(x, y, ...)
+  ix <- findInterval(x, dens$x)
+  iy <- findInterval(y, dens$y)
+  ii <- cbind(ix, iy)
+  return(dens$z[ii])
+}
+
+perc.meth.cpg$density <- get_density(
+  perc.meth.cpg$avg_ctrl, perc.meth.cpg$avg_treat, n = 100)
+
+th <- theme_bw(base_size=24) + 
+  theme(
+    plot.title = element_text(
+      angle = 0,
+      size = 18,
+      face = 'bold',
+      vjust = 1),
+    axis.text.x = element_text(
+      angle = 0,
+      size = 18,
+      vjust = 1),
+    axis.text.y = element_text(
+      angle = 0,
+      size = 18,
+      vjust = 0.5),
+    axis.title = element_text(
+      size = 18),
+    legend.text = element_text(
+      size = 14),
+    legend.title = element_text(
+      size = 18)
+  )
+
+ggplot(perc.meth.cpg) + 
+  geom_point(aes(x=avg_ctrl, y=avg_treat, color = density)) + 
+  scale_color_viridis() +
+  geom_abline(intercept=10, slope=1, linetype="dashed", color="red") +
+  geom_abline(intercept=-10, slope=1, linetype="dashed", color="red") +
+  labs(
+    x=paste("Average % methylation in", contrast[2]),
+    y=paste("Average % methylation in", contrast[1]),
+    title=paste(contrast[1], "vs", contrast[2], "CpGs")
+  ) +
+  th 
+```
+
+## DMR table
+Differentially methylated regions are calcualted using methylKit.
+Depending on the sample size per each set it will either use Fisher’s exact or logistic regression to calculate P-values.
+P-values will be adjusted to Q-values using SLIM method (Wang, Tuominen, and Tsai 2011).
+Note: if we have replicates, the function will automatically use logistic regression.
+
+Treatment : `r contrast[1]`  
+Control : `r contrast[2]`
+
+**`r total_sig_dmrs`** DMRs were identified with q-value < 0.01 and % methylation difference > 10.
+
+```{r dmr_table, eval=run_dmr_annotation}
+# Display in table
+non_sample_cols <- c("coord", "avg_treat", "avg_ctrl", "chr", "start", "end", "strand", "pvalue", "qvalue", "meth.diff")
+sample_cols <- colnames(perc.meth.tile.sig)[!colnames(perc.meth.tile.sig) %in% non_sample_cols]
+dmr_table <- perc.meth.tile.sig[sample_cols]
+dmr_table <- cbind(
+  perc.meth.tile.sig[c("chr", "start", "end")],
+  dmr_table,
+  perc.meth.tile.sig[c("avg_treat", "avg_ctrl", "pvalue","qvalue", "meth.diff")]
+)
+
+round_cols <- c(sample_cols, "avg_treat", "avg_ctrl", "pvalue", "qvalue", "meth.diff")
+bp_cols <- c("start", "end")
+
+datatable(
+  dmr_table,
+  rownames = FALSE,
+  extensions = "Buttons",
+  options = list(
+    dom = "Bfrtip",
+    buttons = list(
+      list(
+        extend = "copy"
+      ),
+      list(
+        extend = "csv",
+        filename = paste(params$study, "dmr", sep="_")
+      ),
+      list(
+        extend = "excel",
+        filename = paste(params$study, "dmr", sep="_")
+      ),
+      list(
+        extend = "pdf",
+        filename = paste(params$study, "dmr", sep="_")
+      ),
+      list(
+        extend = "print"
+      )
+    )
+  ),
+  caption= htmltools::tags$caption(
+    style = 'caption-side: bottom;',  
+    paste("avg_treat = Average DMR % methylation across", contrast[1], "samples"), htmltools::tags$br(),
+    paste("avg_ctrl = Average DMR % methylation across", contrast[2], "samples"), htmltools::tags$br(),
+    paste("meth.diff =", contrast[1], "DMR % methylation -", contrast[2], "DMR % methylation") 
+  )
+) %>%
+formatSignif(
+  columns = round_cols,
+  digits = 4
+) %>%
+formatRound(
+  columns = bp_cols,
+  digits = 0,
+  interval = NULL
+)
+
+```
+
+## Volcano plot
+`r paste("% methylation change =", contrast[1], "% methylation -", contrast[2], "% methylation")`
+
+```{r volcano_plot, fig.height=10, fig.width=10}
+
+# Label significance groups
+perc.meth.tile$sig.group <- "NS"
+perc.meth.tile$sig.group[perc.meth.tile$qvalue < 0.01 & abs(perc.meth.tile$meth.diff) <= 10] <- "qvalue"
+perc.meth.tile$sig.group[perc.meth.tile$qvalue >= 0.01 & abs(perc.meth.tile$meth.diff) > 10] <- "meth.diff"
+perc.meth.tile$sig.group[perc.meth.tile$qvalue < 0.01 & abs(perc.meth.tile$meth.diff) > 10] <- "qvalue and meth.diff"
+
+
+# Borrowing EnhancedVolcano theme
+th <- theme_bw(base_size = 24) +
+  theme(
+    legend.background = element_rect(),
+
+    # title, subtitle, and caption
+    plot.title = element_text(
+      angle = 0,
+      size = 18,
+      face = 'bold',
+      vjust = 1),
+    plot.subtitle = element_text(
+        angle = 0,
+        size = 14,
+        face = 'plain',
+        vjust = 1),
+    plot.caption = element_text(
+      angle = 0,
+      size = 14,
+      face = 'plain',
+      vjust = 1),
+
+    # axis text
+    axis.text.x = element_text(
+      angle = 0,
+      size = 18,
+      vjust = 1),
+    axis.text.y = element_text(
+      angle = 0,
+      size = 18,
+      vjust = 0.5),
+    axis.title = element_text(
+      size = 18),
+    axis.line = element_line(
+      size = 0.8,
+      colour = 'black'),
+    panel.border = element_blank(),
+    panel.background = element_blank(),
+
+    # legend
+    legend.position = 'top',
+    legend.key = element_blank(),
+    legend.key.size = unit(0.5, 'cm'),
+    legend.text = element_text(
+      size = 14),
+    title = element_text(
+      size = 14),
+    legend.title = element_blank()
+  )
+
+# Plot Volcano
+ggplot(
+  data = perc.meth.tile,
+  aes(
+    x = meth.diff,
+    y = -log10(qvalue)
+  ) 
+  ) +
+  geom_point(
+    aes(
+      color = sig.group,
+      alpha = 0.6
+    ),
+    show.legend = c(
+      size = FALSE,
+      alpha = FALSE
+    ),
+    size = 2
+  ) +
+  geom_vline(
+    xintercept = c(-10, 10),
+    col = "black",
+    linewidth = 0.4,
+    linetype = "longdash"
+  ) +
+  geom_hline(
+    yintercept = -log10(0.01),
+    col = "black",
+    linewidth = 0.4,
+    linetype = "longdash"
+  ) +
+  #ylim(0, 50) + 
+  scale_color_manual(
+    values=c(
+      "NS" = "grey30",
+      "qvalue" = "royalblue",
+      "meth.diff" = "forestgreen",
+      "qvalue and meth.diff" = "red2"
+    ),
+    breaks=c(
+      "NS",
+      "qvalue",
+      "meth.diff",
+      "qvalue and meth.diff"
+    )
+  ) +
+  th +
+  labs(
+    x = "% methylation change",
+    y = "-log10(qvalue)",
+    title = paste(contrast[1], "vs", contrast[2], "total DMRs"),
+    subtitle = "Thresholds: qvalue=0.01, meth.diff=10"
+  ) +
+  guides(
+    color = guide_legend(
+      override.aes = list(
+        size = 5.0
+      )
+    )
+  )
+```
+
+# DMR annotation
+
+```{r dmr_annotation, eval=run_dmr_annotation}
+# Generate Granges object from DMRs dataframe
+dmrs_df <- perc.meth.tile.sig[c("chr", "start", "end", "qvalue", "meth.diff")]
+dmrs_gr <- makeGRangesFromDataFrame(
+  dmrs_df,
+  ignore.strand = TRUE,
+  keep.extra.columns = TRUE,
+  seqnames.field = "chr",
+  start.field = "start",
+  end.field = "end"
+)
+```
+
+## Distance to nearest gene
+Distances from DMR to nearest gene.  
+Distances are calculated with respect to gene TSS from GTF file.
+
+```{r nearest_gene, eval=run_dmr_annotation}
+# Load GTF file as GRanges object
+gtf_gr <- rtracklayer::import(params$gtf_path, format = "gtf")
+
+genes_gr <- gtf_gr[gtf_gr$type == "gene"] 
+tss_gr <- resize(genes_gr, width = 1, fix = "start")
+
+# Calculate distance to nearest gene
+nearest_hits <- distanceToNearest(dmrs_gr, tss_gr)
+distances <- mcols(nearest_hits)
+
+# Aggregate nearest gene information
+dmrs_overlap <- dmrs_df[queryHits(nearest_hits),]
+nearest_genes <- as.data.frame(tss_gr[subjectHits(nearest_hits)])
+nearest_genes <- nearest_genes[c("gene_id", "gene_name", "gene_biotype")]
+colnames(nearest_genes) <- gsub("_", ".", colnames(nearest_genes))
+nearest_genes_df <- cbind(dmrs_overlap, nearest_genes, distances)
+
+count_dmr_overlap <- length(unique(queryHits(nearest_hits)))
+```
+
+**`r count_dmr_overlap` / `r total_sig_dmrs`** 
+**(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs have a nearest gene annotation.  
+
+```{r nearest_gene_plot, eval=run_dmr_annotation, fig.height=10, fig.width=13}
+ggplot(nearest_genes_df, aes(x=distance)) +
+  geom_histogram(color="black", fill="#1c3f74", bins=50) + 
+  scale_x_log10(labels = scales::label_number()) +
+  th + 
+  labs(
+    x="Distance to nearest gene TSS (bp)",
+    y="Frequency"
+  )
+```
+
+DMRs annotated with nearest gene information.
+
+```{r nearest_gene_table, eval=run_dmr_annotation}
+# Display in table
+round_cols <- c("qvalue", "meth.diff")
+int_cols <- c("start", "end", "distance")
+
+datatable(
+  nearest_genes_df,
+  rownames = FALSE,
+  extensions = "Buttons",
+  options = list(
+    dom = "Bfrtip",
+    buttons = list(
+      list(
+        extend = "copy"
+      ),
+      list(
+        extend = "csv",
+        filename = paste(params$study, "nearest_gene", sep="_")
+      ),
+      list(
+        extend = "excel",
+        filename = paste(params$study, "nearest_gene", sep="_")
+      ),
+      list(
+        extend = "pdf",
+        filename = paste(params$study, "nearest_gene", sep="_")
+      ),
+      list(
+        extend = "print"
+      )
+    )
+  )
+) %>%
+formatSignif(
+  columns = round_cols,
+  digits = 4
+) %>%
+formatRound(
+  columns = int_cols,
+  digits = 0,
+  interval = NULL
+)
+```
+
+```{r, mouse_or_human}
+# Check if the assembly is mouse or human for ChromHMM, cCRE, and blacklist analysis
+if ((params$assembly %in% hg38_names) | (params$assembly %in% mm10_names)) {
+  mouse_or_human <- TRUE
+} else {
+  mouse_or_human <- FALSE
+}
+run_dmr_annotation <- run_dmr_annotation & mouse_or_human
+```
+
+
+## ChromHMM
+
+```{r chromhmm, eval=run_dmr_annotation}
+
+# Load ChromHMM annotation
+chromhmm_gr <- rtracklayer::import(params$chromhmm_path)
+# Remove "chr" chromosome prefix in ChromHMM GRanges object
+seqlevels(chromhmm_gr) <- gsub("chr", "", seqlevels(chromhmm_gr))
+chromhmm_df <- as.data.frame(chromhmm_gr)
+chromhmm_df <- chromhmm_df["name"]
+
+# Calculate overlaps between DMRs and ChromHMM annotations
+hits_obj <- findOverlaps(dmrs_gr, chromhmm_gr)
+
+dmrs_overlap <- dmrs_df[queryHits(hits_obj),]
+chromhmm_overlap <- chromhmm_df[subjectHits(hits_obj),]
+ChromHMM.state <- chromhmm_overlap
+overlap_df <- cbind(dmrs_overlap, ChromHMM.state)
+
+count_dmr_overlap <- length(unique(queryHits(hits_obj)))
+```
+
+```{asis, echo = basename(params$chromhmm_path) == "hg38_genome_100_segments.bed"}
+ChromHMM annotations were sourced from https://github.com/ernstlab/full_stack_ChromHMM_annotations
+```
+
+```{asis, echo = basename(params$chromhmm_path) == "mm10_100_segments_segments.bed"}
+ChromHMM annotations were sourced from https://github.com/ernstlab/mouse_fullStack_annotations
+```
+
+**`r count_dmr_overlap` / `r total_sig_dmrs`** 
+**(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with ChromHMM annotations.  
+Note: a single DMR may have multiple ChromHMM annotations.
+
+```{r chromhmm_plot, eval=run_dmr_annotation, fig.height=10, fig.width=16}
+if (count_dmr_overlap > 0) {
+  ggplot(overlap_df, aes(x=ChromHMM.state)) +
+    geom_bar(fill = "#1c3f74") + 
+    th + 
+    theme(
+      axis.text.x = element_text(size=14),
+      axis.text.y = element_text(size=14)
+    ) +
+    labs(
+      x = "ChromHMM state",
+    ) +
+    coord_flip()
+}
+```
+
+```{r chromhmm_table, eval=run_dmr_annotation}
+if (count_dmr_overlap > 0) {
+  # Display in table
+  round_cols <- c("qvalue", "meth.diff")
+  bp_cols <- c("start", "end")
+
+  datatable(
+    overlap_df,
+    rownames = FALSE,
+    extensions = "Buttons",
+    options = list(
+      dom = "Bfrtip",
+      buttons = list(
+        list(
+          extend = "copy"
+        ),
+        list(
+          extend = "csv",
+          filename = paste(params$study, "chromhmm", sep="_")
+        ),
+        list(
+          extend = "excel",
+          filename = paste(params$study, "chromhmm", sep="_")
+        ),
+        list(
+          extend = "pdf",
+          filename = paste(params$study, "chromhmm", sep="_")
+        ),
+        list(
+          extend = "print"
+        )
+      )
+    )
+  ) %>%
+  formatSignif(
+    columns = round_cols,
+    digits = 4
+  ) %>%
+  formatRound(
+    columns = bp_cols,
+    digits = 0,
+    interval = NULL
+  )
+}
+```
+
+## ENCODE cCRE
+
+```{r ccre, eval=run_dmr_annotation}
+
+# Load cCRE annotation
+ccre_df <- read.table(
+  params$ccre_path,
+  header = FALSE,
+  sep = "\t",
+  col.names = c("chr", "start", "end", "accession_old", "accession", "class")
+)
+# Make starts 1-based
+# Not clear in ENCODE documenattion if cCRE starts are 0-based or 1-based
+# but since it is a BED file, we will assume it is 0-based
+ccre_df$start <- ccre_df$start + 1
+
+# Remove "chr" chromosome prefix in cCRE dataframe
+ccre_df$chr <- gsub("chr", "", ccre_df$chr)
+
+ccre_gr <- makeGRangesFromDataFrame(
+  ccre_df,
+  ignore.strand = TRUE,
+  keep.extra.columns = TRUE,
+  seqnames.field = "chr",
+  start.field = "start",
+  end.field = "end",
+)
+
+# Calculate overlaps between DMRs and cCRE annotations
+hits_obj <- findOverlaps(dmrs_gr, ccre_gr)
+
+dmrs_overlap <- dmrs_df[queryHits(hits_obj),]
+ccre_overlap <- ccre_df[subjectHits(hits_obj),]
+ccre_overlap <- ccre_overlap[c("accession", "class")]
+overlap_df <- cbind(dmrs_overlap, ccre_overlap)
+
+count_dmr_overlap <- length(unique(queryHits(hits_obj)))
+```
+
+```{asis, echo = basename(params$ccre_path) == "GRCh38-cCREs.bed"}
+cCRE (candidate cis-regulatory element) annotations were sourced from 
+https://screen.encodeproject.org/ all human cCREs (hg38) Registry of cCREs V3
+```
+
+```{asis, echo = basename(params$ccre_path) == "mm10-cCREs.bed"}
+cCRE (candidate cis-regulatory element) annotations were sourced from 
+https://screen.encodeproject.org/ all mouse cCREs (mm10) Registry of cCREs V3
+```
+
+**`r count_dmr_overlap` / `r total_sig_dmrs`** 
+**(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with cCRE annotations.  
+Note: a single DMR may have multiple cCRE annotations.
+
+```{r ccre_plot, eval=run_dmr_annotation, fig.height=10, fig.width=13}
+if (count_dmr_overlap > 0) {
+  ggplot(overlap_df, aes(x=class)) +
+    geom_bar(fill = "#1c3f74") + 
+    th + 
+    labs(
+      x = "cCRE classificaiton",
+    ) +
+    coord_flip()
+}
+```
+
+```{r ccre_table, eval=run_dmr_annotation}
+if (count_dmr_overlap > 0) {
+  # Display in table
+  round_cols <- c("qvalue", "meth.diff")
+  bp_cols <- c("start", "end")
+
+  datatable(
+    overlap_df,
+    rownames = FALSE,
+    extensions = "Buttons",
+    options = list(
+      dom = "Bfrtip",
+      buttons = list(
+        list(
+          extend = "copy"
+        ),
+        list(
+          extend = "csv",
+          filename = paste(params$study, "ccre", sep="_")
+        ),
+        list(
+          extend = "excel",
+          filename = paste(params$study, "ccre", sep="_")
+        ),
+        list(
+          extend = "pdf",
+          filename = paste(params$study, "ccre", sep="_")
+        ),
+        list(
+          extend = "print"
+        )
+      )
+    )
+  ) %>%
+  formatSignif(
+    columns = round_cols,
+    digits = 4
+  ) %>%
+  formatRound(
+    columns = bp_cols,
+    digits = 0,
+    interval = NULL
+  )
+}
+```
+
+## ENCODE Blacklist
+
+```{r blacklist, eval=run_dmr_annotation}
+
+# Load ChromHMM annotation
+blacklist_gr <- rtracklayer::import(params$blacklist_path)
+# Remove "chr" chromosome prefix in blacklist GRanges object
+seqlevels(blacklist_gr) <- gsub("chr", "", seqlevels(blacklist_gr))
+blacklist_df <- as.data.frame(blacklist_gr)
+blacklist_df <- blacklist_df["name"]
+
+# Calculate overlaps between DMRs and blacklist annotations
+hits_obj <- findOverlaps(dmrs_gr, blacklist_gr)
+
+dmrs_overlap <- dmrs_df[queryHits(hits_obj),]
+blacklist_overlap <- blacklist_df[subjectHits(hits_obj),]
+blacklist.state <- blacklist_overlap
+overlap_df <- cbind(dmrs_overlap, blacklist.state)
+
+count_dmr_overlap <- length(unique(queryHits(hits_obj)))
+```
+
+```{asis, echo = basename(params$blacklist_path) == "hg38-blacklist.v2.bed"}
+blacklist annotations were sourced from https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz
+```
+
+```{asis, echo = basename(params$blacklist_path) == "mm10-blacklist.v2.bed"}
+ChromHMM annotations were sourced from https://github.com/Boyle-Lab/Blacklist/blob/master/lists/mm10-blacklist.v2.bed.gz
+```
+
+**`r count_dmr_overlap` / `r total_sig_dmrs`** 
+**(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with blacklist annotations.  
+Note: a single DMR may have multiple blacklist annotations.
+
+```{r blacklist_table, eval=run_dmr_annotation}
+if (count_dmr_overlap > 0) {
+  # Display in table
+  round_cols <- c("qvalue", "meth.diff")
+  bp_cols <- c("start", "end")
+
+  datatable(
+    overlap_df,
+    rownames = FALSE,
+    extensions = "Buttons",
+    options = list(
+      dom = "Bfrtip",
+      buttons = list(
+        list(
+          extend = "copy"
+        ),
+        list(
+          extend = "csv",
+          filename = paste(params$study, "blacklist", sep="_")
+        ),
+        list(
+          extend = "excel",
+          filename = paste(params$study, "blacklist", sep="_")
+        ),
+        list(
+          extend = "pdf",
+          filename = paste(params$study, "blacklist", sep="_")
+        ),
+        list(
+          extend = "print"
+        )
+      )
+    )
+  ) %>%
+  formatSignif(
+    columns = round_cols,
+    digits = 4
+  ) %>%
+  formatRound(
+    columns = bp_cols,
+    digits = 0,
+    interval = NULL
+  )
+}
 ```
