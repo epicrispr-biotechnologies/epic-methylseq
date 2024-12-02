@@ -1431,14 +1431,14 @@ ChromHMM annotations were sourced from https://github.com/ernstlab/mouse_fullSta
 **(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with ChromHMM annotations.  
 Note: a single DMR may have multiple ChromHMM annotations.
 
-```{r chromhmm_plot, eval=run_dmr_annotation, fig.height=10, fig.width=16}
+```{r chromhmm_plot, eval=run_dmr_annotation, fig.height=16, fig.width=13}
 if (count_dmr_overlap > 0) {
   ggplot(overlap_df, aes(x=ChromHMM.state)) +
     geom_bar(fill = "#1c3f74") + 
     th + 
     theme(
-      axis.text.x = element_text(size=14),
-      axis.text.y = element_text(size=14)
+      axis.text.x = element_text(size=13),
+      axis.text.y = element_text(size=13)
     ) +
     labs(
       x = "ChromHMM state",
