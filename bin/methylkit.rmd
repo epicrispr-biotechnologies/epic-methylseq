@@ -1305,7 +1305,9 @@ dmrs_gr <- makeGRangesFromDataFrame(
 Distances from DMR to nearest gene.  
 Distances are calculated with respect to gene TSS from GTF file.
 
-```{r nearest_gene, eval=run_dmr_annotation}
+
+
+```{r nearest_gene, eval=run_dmr_annotation, results="asis"}
 # Load GTF file as GRanges object
 gtf_gr <- rtracklayer::import(params$gtf_path, format = "gtf")
 
@@ -1324,10 +1326,13 @@ colnames(nearest_genes) <- gsub("_", ".", colnames(nearest_genes))
 nearest_genes_df <- cbind(dmrs_overlap, nearest_genes, distances)
 
 count_dmr_overlap <- length(unique(queryHits(nearest_hits)))
-```
 
-**`r count_dmr_overlap` / `r total_sig_dmrs`** 
-**(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs have a nearest gene annotation.  
+cat(paste0("<b>", count_dmr_overlap, " / ", total_sig_dmrs, "</b>"))
+cat("\n\n")
+cat(paste0("<b>", round((count_dmr_overlap / total_sig_dmrs) * 100, 2), "%", "</b>"))
+cat(" of DMRs have a nearest gene annotation")
+
+```
 
 ```{r nearest_gene_plot, eval=run_dmr_annotation, fig.height=10, fig.width=13}
 ggplot(nearest_genes_df, aes(x=distance)) +
@@ -1399,7 +1404,7 @@ run_dmr_annotation <- run_dmr_annotation & mouse_or_human
 
 ## ChromHMM
 
-```{r chromhmm, eval=run_dmr_annotation}
+```{r chromhmm, eval=run_dmr_annotation, results = "asis"}
 
 # Load ChromHMM annotation
 chromhmm_gr <- rtracklayer::import(params$chromhmm_path)
@@ -1417,19 +1422,25 @@ ChromHMM.state <- chromhmm_overlap
 overlap_df <- cbind(dmrs_overlap, ChromHMM.state)
 
 count_dmr_overlap <- length(unique(queryHits(hits_obj)))
+
+if (basename(params$chromhmm_path) == "hg38_genome_100_segments.bed") {
+  cat("ChromHMM annotations were sourced from ")
+  cat('<a href="https://github.com/ernstlab/full_stack_ChromHMM_annotations">https://github.com/ernstlab/full_stack_ChromHMM_annotations</a>')
+}
+
+if (basename(params$chromhmm_path) == "mm10_100_segments_segments.bed") {
+  cat("ChromHMM annotations were sourced from ")
+  cat('<a href="https://github.com/ernstlab/mouse_fullStack_annotations">https://github.com/ernstlab/mouse_fullStack_annotations</a>')
+}
+cat("\n\n")
+cat(paste0("<b>", count_dmr_overlap, " / ", total_sig_dmrs, "</b>"))
+cat("\n\n")
+cat(paste0("<b>", round((count_dmr_overlap / total_sig_dmrs) * 100, 2), "%", "</b>"))
+cat(" of DMRs overlap with ChromHMM annotations")
+cat("\n\n")
+cat("Note: a single DMR may have multiple ChromHMM annotations.")
 ```
 
-```{asis, echo = basename(params$chromhmm_path) == "hg38_genome_100_segments.bed"}
-ChromHMM annotations were sourced from https://github.com/ernstlab/full_stack_ChromHMM_annotations
-```
-
-```{asis, echo = basename(params$chromhmm_path) == "mm10_100_segments_segments.bed"}
-ChromHMM annotations were sourced from https://github.com/ernstlab/mouse_fullStack_annotations
-```
-
-**`r count_dmr_overlap` / `r total_sig_dmrs`** 
-**(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with ChromHMM annotations.  
-Note: a single DMR may have multiple ChromHMM annotations.
 
 ```{r chromhmm_plot, eval=run_dmr_annotation, fig.height=16, fig.width=13}
 if (count_dmr_overlap > 0) {
@@ -1530,21 +1541,25 @@ ccre_overlap <- ccre_overlap[c("accession", "class")]
 overlap_df <- cbind(dmrs_overlap, ccre_overlap)
 
 count_dmr_overlap <- length(unique(queryHits(hits_obj)))
-```
 
-```{asis, echo = basename(params$ccre_path) == "GRCh38-cCREs.bed"}
-cCRE (candidate cis-regulatory element) annotations were sourced from 
-https://screen.encodeproject.org/ all human cCREs (hg38) Registry of cCREs V3
+if (basename(params$ccre_path) == "GRCh38-cCREs.bed") {
+  cat("cCRE (candidate cis-regulatory element) annotations were sourced from ")
+  cat('<a href="https://screen.encodeproject.org/">https://screen.encodeproject.org/</a>')
+  cat(" all human cCREs (hg38) Registry of cCREs V3")
+}
+if (basename(params$ccre_path) == "mm10-cCREs.bed") {
+  cat("cCRE (candidate cis-regulatory element) annotations were sourced from ")
+  cat('<a href="https://screen.encodeproject.org/">https://screen.encodeproject.org/</a>')
+  cat(" all mouse cCREs (mm10) Registry of cCREs V3")
+}
+cat("\n\n")
+cat(paste0("<b>", count_dmr_overlap, " / ", total_sig_dmrs, "</b>"))
+cat("\n\n")
+cat(paste0("<b>", round((count_dmr_overlap / total_sig_dmrs) * 100, 2), "%", "</b>"))
+cat(" of DMRs overlap with cCRE annotations")
+cat("\n\n")
+cat("Note: a single DMR may have multiple cCRE annotations.")
 ```
-
-```{asis, echo = basename(params$ccre_path) == "mm10-cCREs.bed"}
-cCRE (candidate cis-regulatory element) annotations were sourced from 
-https://screen.encodeproject.org/ all mouse cCREs (mm10) Registry of cCREs V3
-```
-
-**`r count_dmr_overlap` / `r total_sig_dmrs`** 
-**(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with cCRE annotations.  
-Note: a single DMR may have multiple cCRE annotations.
 
 ```{r ccre_plot, eval=run_dmr_annotation, fig.height=10, fig.width=13}
 if (count_dmr_overlap > 0) {
@@ -1624,19 +1639,25 @@ blacklist.state <- blacklist_overlap
 overlap_df <- cbind(dmrs_overlap, blacklist.state)
 
 count_dmr_overlap <- length(unique(queryHits(hits_obj)))
-```
 
-```{asis, echo = basename(params$blacklist_path) == "hg38-blacklist.v2.bed"}
-blacklist annotations were sourced from https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz
-```
 
-```{asis, echo = basename(params$blacklist_path) == "mm10-blacklist.v2.bed"}
-ChromHMM annotations were sourced from https://github.com/Boyle-Lab/Blacklist/blob/master/lists/mm10-blacklist.v2.bed.gz
-```
+if (basename(params$blacklist_path) == "hg38-blacklist.v2.bed") {
+  cat("blacklist annotations were sourced from ")
+  cat('<a href="https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz">https://github.com/Boyle-Lab/Blacklist/blob/master/lists/hg38-blacklist.v2.bed.gz</a>')
+}
+if (basename(params$blacklist_path) == "mm10-blacklist.v2.bed") {
+  cat("blacklist annotations were sourced from ")
+  cat('<a href="https://github.com/Boyle-Lab/Blacklist/blob/master/lists/mm10-blacklist.v2.bed.gz">https://github.com/Boyle-Lab/Blacklist/blob/master/lists/mm10-blacklist.v2.bed.gz</a>')
+}
+cat("\n\n")
+cat(paste0("<b>", count_dmr_overlap, " / ", total_sig_dmrs, "</b>"))
+cat("\n\n")
+cat(paste0("<b>", round((count_dmr_overlap / total_sig_dmrs) * 100, 2), "%", "</b>"))
+cat(" of DMRs overlap with blacklist annotations")
+cat("\n\n")
+cat("Note: a single DMR may have multiple blacklist annotations.")
 
-**`r count_dmr_overlap` / `r total_sig_dmrs`** 
-**(`r round((count_dmr_overlap / total_sig_dmrs) * 100, 2)` %)** of DMRs overlap with blacklist annotations.  
-Note: a single DMR may have multiple blacklist annotations.
+```
 
 ```{r blacklist_table, eval=run_dmr_annotation}
 if (count_dmr_overlap > 0) {
