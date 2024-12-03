@@ -1327,10 +1327,9 @@ nearest_genes_df <- cbind(dmrs_overlap, nearest_genes, distances)
 
 count_dmr_overlap <- length(unique(queryHits(nearest_hits)))
 
-cat(paste0("<b>", count_dmr_overlap, " / ", total_sig_dmrs, "</b>"))
-cat("\n\n")
-cat(paste0("<b>", round((count_dmr_overlap / total_sig_dmrs) * 100, 2), "%", "</b>"))
-cat(" of DMRs have a nearest gene annotation")
+cat(paste0("<b>", count_dmr_overlap, " / ", total_sig_dmrs, " (", "</b>"))
+cat(paste0("<b>", round((count_dmr_overlap / total_sig_dmrs) * 100, 2), "%)", "</b>"))
+cat(" of DMRs have a nearest gene annotation.")
 
 ```
 
@@ -1433,9 +1432,8 @@ if (basename(params$chromhmm_path) == "mm10_100_segments_segments.bed") {
   cat('<a href="https://github.com/ernstlab/mouse_fullStack_annotations">https://github.com/ernstlab/mouse_fullStack_annotations</a>')
 }
 cat("\n\n")
-cat(paste0("<b>", count_dmr_overlap, " / ", total_sig_dmrs, "</b>"))
-cat("\n\n")
-cat(paste0("<b>", round((count_dmr_overlap / total_sig_dmrs) * 100, 2), "%", "</b>"))
+cat(paste0("<b>", count_dmr_overlap, " / ", total_sig_dmrs, " (", "</b>"))
+cat(paste0("<b>", round((count_dmr_overlap / total_sig_dmrs) * 100, 2), "%)", "</b>"))
 cat(" of DMRs overlap with ChromHMM annotations")
 cat("\n\n")
 cat("Note: a single DMR may have multiple ChromHMM annotations.")
@@ -1506,7 +1504,7 @@ if (count_dmr_overlap > 0) {
 
 ## ENCODE cCRE
 
-```{r ccre, eval=run_dmr_annotation}
+```{r ccre, eval=run_dmr_annotation, results = "asis"}
 
 # Load cCRE annotation
 ccre_df <- read.table(
@@ -1553,9 +1551,8 @@ if (basename(params$ccre_path) == "mm10-cCREs.bed") {
   cat(" all mouse cCREs (mm10) Registry of cCREs V3")
 }
 cat("\n\n")
-cat(paste0("<b>", count_dmr_overlap, " / ", total_sig_dmrs, "</b>"))
-cat("\n\n")
-cat(paste0("<b>", round((count_dmr_overlap / total_sig_dmrs) * 100, 2), "%", "</b>"))
+cat(paste0("<b>", count_dmr_overlap, " / ", total_sig_dmrs, " (", "</b>"))
+cat(paste0("<b>", round((count_dmr_overlap / total_sig_dmrs) * 100, 2), "%)", "</b>"))
 cat(" of DMRs overlap with cCRE annotations")
 cat("\n\n")
 cat("Note: a single DMR may have multiple cCRE annotations.")
@@ -1621,7 +1618,7 @@ if (count_dmr_overlap > 0) {
 
 ## ENCODE Blacklist
 
-```{r blacklist, eval=run_dmr_annotation}
+```{r blacklist, eval=run_dmr_annotation, results = "asis"}
 
 # Load ChromHMM annotation
 blacklist_gr <- rtracklayer::import(params$blacklist_path)
@@ -1650,9 +1647,8 @@ if (basename(params$blacklist_path) == "mm10-blacklist.v2.bed") {
   cat('<a href="https://github.com/Boyle-Lab/Blacklist/blob/master/lists/mm10-blacklist.v2.bed.gz">https://github.com/Boyle-Lab/Blacklist/blob/master/lists/mm10-blacklist.v2.bed.gz</a>')
 }
 cat("\n\n")
-cat(paste0("<b>", count_dmr_overlap, " / ", total_sig_dmrs, "</b>"))
-cat("\n\n")
-cat(paste0("<b>", round((count_dmr_overlap / total_sig_dmrs) * 100, 2), "%", "</b>"))
+cat(paste0("<b>", count_dmr_overlap, " / ", total_sig_dmrs, " (", "</b>"))
+cat(paste0("<b>", round((count_dmr_overlap / total_sig_dmrs) * 100, 2), "%)", "</b>"))
 cat(" of DMRs overlap with blacklist annotations")
 cat("\n\n")
 cat("Note: a single DMR may have multiple blacklist annotations.")
