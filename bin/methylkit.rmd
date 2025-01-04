@@ -146,6 +146,36 @@ if ("EPI321" %in% metadata$condition & "CONTROL" %in% metadata$condition) {
   treated <- metadata$sample[metadata$condition == "D7"]
   control <- metadata$sample[metadata$condition == "D2"]
   contrast <- c("D7", "D2")
+} else if ("EPI321" %in% metadata$condition & "UNTREATED" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "EPI321", 1, 0)
+  treated <- metadata$sample[metadata$condition == "EPI321"]
+  control <- metadata$sample[metadata$condition == "UNTREATED"]
+  contrast <- c("EPI321", "UNTREATED")
+} else if ("EPI321" %in% metadata$condition & "STOP" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "EPI321", 1, 0)
+  treated <- metadata$sample[metadata$condition == "EPI321"]
+  control <- metadata$sample[metadata$condition == "STOP"]
+  contrast <- c("EPI321", "STOP")
+} else if ("STOP" %in% metadata$condition & "UNTREATED" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "STOP", 1, 0)
+  treated <- metadata$sample[metadata$condition == "STOP"]
+  control <- metadata$sample[metadata$condition == "UNTREATED"]
+  contrast <- c("STOP", "UNTREATED")
+} else if ("EPI321" %in% metadata$condition & "NT" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "EPI321", 1, 0)
+  treated <- metadata$sample[metadata$condition == "EPI321"]
+  control <- metadata$sample[metadata$condition == "NT"]
+  contrast <- c("EPI321", "NT")
+} else if ("NT" %in% metadata$condition & "UNTREATED" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "NT", 1, 0)
+  treated <- metadata$sample[metadata$condition == "NT"]
+  control <- metadata$sample[metadata$condition == "UNTREATED"]
+  contrast <- c("NT", "UNTREATED")
+} else if ("NT" %in% metadata$condition & "UNTREATED" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "NT", 1, 0)
+  treated <- metadata$sample[metadata$condition == "NT"]
+  control <- metadata$sample[metadata$condition == "UNTREATED"]
+  contrast <- c("NT", "UNTREATED")
 } else {
   stop("Unknown contrast specified in samplesheet condition column")
 }

@@ -246,6 +246,9 @@ rmarkdown::render(
       - UD
       - D2
       - D7
+      - UNTREATED
+      - STOP
+      - NT
 - **bismark_path**: path to local directory containing bismark coverage files (`.deduplicated.bismark.cov`) located in `/bismark/methylation_calls/methylation_coverage/` directory of nf-core/methylseq output
 - **gtf_path**: path to local gtf file for nearest gene analysis, options:
   - `s3://epic-bio-data-us-west-2/ref_genome_index/human/ensembl/release_109/gene_annotation/Homo_sapiens.GRCh38.109.cas_molecule.gtf`
