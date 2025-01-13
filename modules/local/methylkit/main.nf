@@ -21,8 +21,6 @@ process METHYLKIT {
 
     script:
     """
-    ls -al \${PWD}/${bismark_cov_dir}
-    ls -al //nextflow-bin/
     Rscript -e "rmarkdown::render(
         '//nextflow-bin/methylkit.rmd',
         output_file = '${study}_methylkit.html',
