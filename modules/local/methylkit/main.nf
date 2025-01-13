@@ -8,7 +8,7 @@ process METHYLKIT {
     val qualimap_output
     path samplesheet
     path bismark_cov_dir
-    path genome_assembly
+    val genome_assembly
     path gtf
     path chromhmm
     path ccre
@@ -22,8 +22,6 @@ process METHYLKIT {
 
     script:
     """
-    ls -al \${PWD}/${bismark_cov_dir}
-    ls -al //nextflow-bin/
     Rscript -e "rmarkdown::render(
         '//nextflow-bin/methylkit.rmd',
         output_file = '${study}_methylkit.html',
@@ -34,9 +32,9 @@ process METHYLKIT {
             metadata_path = '\${PWD}/${samplesheet}',
             bismark_path = '\${PWD}/${bismark_cov_dir}',
             out_path = '\${PWD}',
-            assembly = 'hg38',
             gtf_path = '\${PWD}/${gtf}',
             chromhmm_path = '\${PWD}/${chromhmm}',
+            assembly = '\${PWD}/${genome_assembly}',
             ccre_path = '\${PWD}/${ccre}',
             blacklist_path = '\${PWD}/${blacklist}'
         )

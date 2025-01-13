@@ -114,6 +114,7 @@ if ("EPI321" %in% metadata$condition & "CONTROL" %in% metadata$condition) {
   treated <- metadata$sample[metadata$condition == "D7"]
   control <- metadata$sample[metadata$condition == "D2"]
   contrast <- c("D7", "D2")
+
 } else {
   stop("Unknown contrast specified in samplesheet condition column")
 }
@@ -160,6 +161,8 @@ meth.tile=methylKit::unite(tile.obj, destrand=FALSE, mc.cores=cores)
 # Dataset overview
 
 ```{r dataset_overview}
+
+=======
 
 hg38_names <- c(
   "hg38",
@@ -931,7 +934,7 @@ meth.dmc.df <- as.data.frame(meth.dmc)
 meth.dmr.df <- as.data.frame(meth.dmr)
 ```
 
-```{r percent_methylation_cpg, echo=FALSE, message = FALSE}
+```{r percent_methylation_cpg}
 
 perc.meth.cpg=percMethylation(meth, rowids = TRUE)
 perc.meth.cpg <- as.data.frame(perc.meth.cpg)
@@ -942,12 +945,9 @@ meth.dmc.df$coord <- paste0(meth.dmc.df$chr,".",meth.dmc.df$start,".",meth.dmc.d
 perc.meth.cpg <- merge(perc.meth.cpg, meth.dmc.df, by="coord")
 
 # This is the final CpG file we want!!!! 
-file1 <- paste0(params$out_path, "/", params$study, "_dmc.tsv")
-message(file1)
-print(paste("File path for CpG file:", file1))  # Debugging statement
 write.table(
   perc.meth.cpg,
-  file = file1,
+  file = paste0(params$out_path, "/", params$study,"_dmc.tsv"),
   sep="\t",
   col.names=TRUE,
   row.names=FALSE,
@@ -956,11 +956,9 @@ write.table(
 
 # This is the final DMC file we want!!!
 perc.meth.cpg.sig <- perc.meth.cpg[perc.meth.cpg$qvalue <=0.01 & abs(perc.meth.cpg$meth.diff) > 10,]
-file2 <- paste0(params$out_path, "/", params$study, "_dmc_qval_0.01_methdiff_10.tsv")
-print(paste("File path for DMC file:", file2))  # Debugging statement
 write.table(
   perc.meth.cpg.sig,
-  file = file2,
+  file = paste0(params$out_path, "/", params$study,"_dmc_qval_0.01_methdiff_10.tsv"),
   sep="\t",
   col.names=TRUE,
   row.names=FALSE,
@@ -1003,7 +1001,6 @@ write.table(
 ```
 
 ## CpG % methylation scatterplot
-
 All `r nrow(perc.meth.cpg)` CpGs are plotted with 
 average % methylation in `r paste0(contrast[1], " vs ", contrast[2])`.
 
