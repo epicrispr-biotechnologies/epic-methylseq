@@ -265,7 +265,7 @@ workflow METHYLSEQ {
             QUALIMAP_BAMQC.out.results.collect(),
             ch_samplesheet,
             bismark_cov_dir,
-            PREPARE_GENOME.out.fasta,
+            params.fasta,
             ch_chromhmm,
             ch_ccre,
             ch_blacklist,
