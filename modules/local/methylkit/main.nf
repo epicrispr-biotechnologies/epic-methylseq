@@ -8,7 +8,7 @@ process METHYLKIT {
     val qualimap_output
     path samplesheet
     path bismark_cov_dir
-    path genome_assembly
+    val genome_assembly
     path chromhmm
     path ccre
     path blacklist
