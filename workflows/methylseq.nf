@@ -32,6 +32,8 @@ ch_multiqc_custom_methods_description = params.multiqc_methods_description ? fil
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
+include { METHYLKIT } from '../modules/local/methylkit/main'
+
 //
 // SUBWORKFLOWS: Consisting of a mix of local and nf-core/modules
 //
@@ -51,8 +53,6 @@ else if ( params.aligner == 'bwameth' ){
     IMPORT NF-CORE MODULES/SUBWORKFLOWS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
-
-include { METHYLKIT } from '../modules/local/methylkit/main'
 
 //
 // MODULE: Installed directly from nf-core/modules
@@ -78,6 +78,8 @@ ch_ccre = Channel.fromPath(
     file(params.ccre, checkIfExists: true))
 ch_blacklist = Channel.fromPath(
     file(params.blacklist, checkIfExists: true))
+ch_gtf = Channel.fromPath(
+    file(params.gtf, checkIfExists: true))
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -266,6 +268,7 @@ workflow METHYLSEQ {
             ch_samplesheet,
             bismark_cov_dir,
             PREPARE_GENOME.out.fasta,
+            ch_gtf,
             ch_chromhmm,
             ch_ccre,
             ch_blacklist,

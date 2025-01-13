@@ -9,6 +9,7 @@ process METHYLKIT {
     path samplesheet
     path bismark_cov_dir
     path genome_assembly
+    path gtf
     path chromhmm
     path ccre
     path blacklist
@@ -34,7 +35,8 @@ process METHYLKIT {
             bismark_path = '\${PWD}/${bismark_cov_dir}',
             out_path = '\${PWD}',
             assembly = 'hg38',
-            gtf_path = '\${PWD}/${genome_assembly}',
+            gtf_path = '\${PWD}/${gtf}',
+            chromhmm_path = '\${PWD}/${chromhmm}',
             ccre_path = '\${PWD}/${ccre}',
             blacklist_path = '\${PWD}/${blacklist}'
         )
