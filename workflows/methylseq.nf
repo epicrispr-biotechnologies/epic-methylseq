@@ -52,6 +52,10 @@ else if ( params.aligner == 'bwameth' ){
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
+//
+// MODULE: Installed directly from local/modules
+//
+
 include { METHYLKIT } from '../modules/local/methylkit/main'
 
 //
@@ -78,6 +82,8 @@ ch_ccre = Channel.fromPath(
     file(params.ccre, checkIfExists: true))
 ch_blacklist = Channel.fromPath(
     file(params.blacklist, checkIfExists: true))
+ch_gtf = Channel.fromPath(
+    file(params.gtf, checkIfExists: true))
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -269,6 +275,7 @@ workflow METHYLSEQ {
             ch_chromhmm,
             ch_ccre,
             ch_blacklist,
+            ch_gtf,
             params.user,
             params.study
         )
