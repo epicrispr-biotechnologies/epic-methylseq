@@ -52,6 +52,8 @@ else if ( params.aligner == 'bwameth' ){
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
+include { METHYLKIT } from '../modules/local/methylkit/main'
+
 //
 // MODULE: Installed directly from nf-core/modules
 //
@@ -62,6 +64,20 @@ include { CUSTOM_DUMPSOFTWAREVERSIONS } from '../modules/nf-core/custom/dumpsoft
 include { TRIMGALORE                  } from '../modules/nf-core/trimgalore/main'
 include { QUALIMAP_BAMQC              } from '../modules/nf-core/qualimap/bamqc/main'
 include { PRESEQ_LCEXTRAP             } from '../modules/nf-core/preseq/lcextrap/main'
+
+
+/*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ARGUMENT CHANNELS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*/
+
+ch_chromhmm = Channel.fromPath(
+    file(params.chromhmm, checkIfExists: true))
+ch_ccre = Channel.fromPath(
+    file(params.ccre, checkIfExists: true))
+ch_blacklist = Channel.fromPath(
+    file(params.blacklist, checkIfExists: true))
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -234,6 +250,34 @@ workflow METHYLSEQ {
         multiqc_report = MULTIQC.out.report.toList()
         ch_versions    = ch_versions.mix(MULTIQC.out.versions)
     }
+
+    //
+    // MODULE: METHLYKIT_REPORT
+    //
+
+    ch_methylkit_report = Channel.empty()
+    ch_samplesheet = Channel.value(file(params.input, checkIfExists: true))
+
+    if (!params.skip_methylkit) {
+
+        bismark_cov_dir = Channel.fromPath("${params.outdir}/bismark/methylation_calls/methylation_coverage/")
+        METHYLKIT(
+            QUALIMAP_BAMQC.out.results.collect(),
+            ch_samplesheet,
+            bismark_cov_dir,
+            params.fasta,
+            ch_chromhmm,
+            ch_ccre,
+            ch_blacklist,
+            params.user,
+            params.study
+        )
+        ch_methylkit_report = METHYLKIT.out.report
+
+    }
+
+    emit:
+    methylkit_report = ch_methylkit_report
 }
 
 /*
