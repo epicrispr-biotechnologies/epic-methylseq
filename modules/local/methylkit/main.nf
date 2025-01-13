@@ -31,8 +31,8 @@ process METHYLKIT {
             metadata_path = '\${PWD}/${samplesheet}',
             bismark_path = '\${PWD}/${bismark_cov_dir}',
             out_path = '\${PWD}',
-            assembly = 'hg38',
-            gtf_path = '\${PWD}/${genome_assembly}',
+            assembly = '${genome_assembly}',
+            gtf_path = <add the path to the gtf here>,
             ccre_path = '\${PWD}/${ccre}',
             blacklist_path = '\${PWD}/${blacklist}'
         )
