@@ -34,7 +34,7 @@ process METHYLKIT {
             out_path = '\${PWD}',
             gtf_path = '\${PWD}/${gtf}',
             chromhmm_path = '\${PWD}/${chromhmm}',
-            assembly = '\${PWD}/${genome_assembly}',
+            assembly = 'hg38',
             ccre_path = '\${PWD}/${ccre}',
             blacklist_path = '\${PWD}/${blacklist}'
         )

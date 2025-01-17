@@ -162,8 +162,6 @@ meth.tile=methylKit::unite(tile.obj, destrand=FALSE, mc.cores=cores)
 
 ```{r dataset_overview}
 
-=======
-
 hg38_names <- c(
   "hg38",
   "GRCh38",

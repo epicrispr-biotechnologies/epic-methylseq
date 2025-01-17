@@ -186,6 +186,7 @@ workflow METHYLSEQ {
         ch_versions = ch_versions.mix(BISMARK.out.versions.unique{ it.baseName })
         ch_bam = BISMARK.out.bam
         ch_dedup = BISMARK.out.dedup
+        ch_cov = BISMARK.out.coverage
         ch_aligner_mqc = BISMARK.out.mqc
     }
     // Aligner: bwameth
@@ -268,14 +269,14 @@ workflow METHYLSEQ {
 
         bismark_cov_dir = Channel.fromPath("${params.outdir}/bismark/methylation_calls/methylation_coverage/")
         METHYLKIT(
-            QUALIMAP_BAMQC.out.results.collect(),
+            BISMARK.out.coverage.collect(),
             ch_samplesheet,
             bismark_cov_dir,
-            params.fasta,
+            PREPARE_GENOME.out.fasta,
+            ch_gtf,
             ch_chromhmm,
             ch_ccre,
             ch_blacklist,
-            ch_gtf,
             params.user,
             params.study
         )
