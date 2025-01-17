@@ -1,6 +1,7 @@
 ---
 params:
   study: "Study Name"
+  user: "User Name"
   metadata_path: "path/to/metadata.csv"
   bismark_path: "path/to/bismark"
   gtf_path: "path/to/gtf"
@@ -10,10 +11,10 @@ params:
   out_path: "path/to/methylkit"
   assembly: "genome_assembly"
 title: |
-  | Differential methylation analysis report
+  |Differential methylation analysis report
   | `r params$study`
 date: "`r Sys.Date()`"
-author: "`r Sys.info()[['user']]`"
+author: "`r 'params$user'`"
 version: "1.0"
 output:
   rmdformats::readthedown:
@@ -26,39 +27,6 @@ css: methylkit.css
 # Differential Methylation Analysis Report
 This R Markdown document performs differential methylation analysis for a specified study. 
 It includes QC analysis, statistical analysis, and visualization of results.
-
-
-Usage from R console:
-rmarkdown::render(
-  "bin/methylkit.rmd", 
-  params = list(
-    study = "JIRA_BDS-XXXX_12ABIC_EPI321_vs_CONTROL", 
-    metadata_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/samplesheet_test_12ABIC.csv",
-    bismark_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC",
-    gtf_path = "/home/tylerborrman/references/hg38/gtf/Homo_sapiens.GRCh38.109.cas_molecule.gtf",
-    chromhmm_path = "/home/tylerborrman/epic-methylseq_data/ChromHMM/hg38_genome_100_segments.bed",
-    ccre_path = "/home/tylerborrman/epic-methylseq_data/cCRE/GRCh38-cCREs.bed",
-    blacklist_path = "/home/tylerborrman/epic-methylseq_data/blacklist/hg38-blacklist.v2.bed",
-    out_path = "/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit",
-    assembly = "hg38"
-  )
-)
-
-Usage from command line:
-Rscript -e "rmarkdown::render(
-  'bin/methylkit.rmd',
-  params = list(
-    study = 'JIRA_BDS-XXXX_12ABIC_EPI321_vs_CONTROL',
-    metadata_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC/samplesheet_test_12ABIC.csv',
-    bismark_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC',
-    gtf_path = '/home/tylerborrman/references/hg38/gtf/Homo_sapiens.GRCh38.109.cas_molecule.gtf',
-    chromhmm_path = '/home/tylerborrman/epic-methylseq_data/ChromHMM/hg38_genome_100_segments.bed',
-    ccre_path = '/home/tylerborrman/epic-methylseq_data/cCRE/GRCh38-cCREs.bed',
-    blacklist_path = '/home/tylerborrman/epic-methylseq_data/blacklist/hg38-blacklist.v2.bed',
-    out_path = '/home/tylerborrman/epic-methylseq_data/test_12ABIC/methylkit',
-    assembly = 'hg38'
-  )
-)"
 
 params:
   study: Study Name with JIRA ID prefix
@@ -146,36 +114,7 @@ if ("EPI321" %in% metadata$condition & "CONTROL" %in% metadata$condition) {
   treated <- metadata$sample[metadata$condition == "D7"]
   control <- metadata$sample[metadata$condition == "D2"]
   contrast <- c("D7", "D2")
-} else if ("EPI321" %in% metadata$condition & "UNTREATED" %in% metadata$condition) {
-  treatment <- ifelse(metadata$condition == "EPI321", 1, 0)
-  treated <- metadata$sample[metadata$condition == "EPI321"]
-  control <- metadata$sample[metadata$condition == "UNTREATED"]
-  contrast <- c("EPI321", "UNTREATED")
-} else if ("EPI321" %in% metadata$condition & "STOP" %in% metadata$condition) {
-  treatment <- ifelse(metadata$condition == "EPI321", 1, 0)
-  treated <- metadata$sample[metadata$condition == "EPI321"]
-  control <- metadata$sample[metadata$condition == "STOP"]
-  contrast <- c("EPI321", "STOP")
-} else if ("STOP" %in% metadata$condition & "UNTREATED" %in% metadata$condition) {
-  treatment <- ifelse(metadata$condition == "STOP", 1, 0)
-  treated <- metadata$sample[metadata$condition == "STOP"]
-  control <- metadata$sample[metadata$condition == "UNTREATED"]
-  contrast <- c("STOP", "UNTREATED")
-} else if ("EPI321" %in% metadata$condition & "NT" %in% metadata$condition) {
-  treatment <- ifelse(metadata$condition == "EPI321", 1, 0)
-  treated <- metadata$sample[metadata$condition == "EPI321"]
-  control <- metadata$sample[metadata$condition == "NT"]
-  contrast <- c("EPI321", "NT")
-} else if ("NT" %in% metadata$condition & "UNTREATED" %in% metadata$condition) {
-  treatment <- ifelse(metadata$condition == "NT", 1, 0)
-  treated <- metadata$sample[metadata$condition == "NT"]
-  control <- metadata$sample[metadata$condition == "UNTREATED"]
-  contrast <- c("NT", "UNTREATED")
-} else if ("NT" %in% metadata$condition & "UNTREATED" %in% metadata$condition) {
-  treatment <- ifelse(metadata$condition == "NT", 1, 0)
-  treated <- metadata$sample[metadata$condition == "NT"]
-  control <- metadata$sample[metadata$condition == "UNTREATED"]
-  contrast <- c("NT", "UNTREATED")
+
 } else {
   stop("Unknown contrast specified in samplesheet condition column")
 }
@@ -1060,7 +999,6 @@ write.table(
 ```
 
 ## CpG % methylation scatterplot
-
 All `r nrow(perc.meth.cpg)` CpGs are plotted with 
 average % methylation in `r paste0(contrast[1], " vs ", contrast[2])`.
 
