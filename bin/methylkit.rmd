@@ -980,11 +980,13 @@ Euclidean distances between samples in tile % methylation matrix.
 # Differentially methylated bases or regions
 
 ```{r diff_meth_cpg}
+# Add sex as a covariate
+covariates = data.frame(sex=c(1,1,1,0,0,0,1,1,1,0,0,0))
 
 ## Finding differentially methylated CpGs 
-myDiff=calculateDiffMeth(meth, mc.cores=cores)
+myDiff=calculateDiffMeth(meth, mc.cores=cores, covariates=covariates)
 # find DMRs 
-myDiff.tile=calculateDiffMeth(meth.tile, mc.cores=cores)
+myDiff.tile=calculateDiffMeth(meth.tile, mc.cores=cores, covariates=covariates)
 
 # Extracting data from the methylDiff objects and coverting to dataframes
 meth.dmc <- getData(myDiff) 
