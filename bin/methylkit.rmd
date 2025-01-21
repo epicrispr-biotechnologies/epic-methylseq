@@ -171,11 +171,11 @@ if ("EPI321" %in% metadata$condition & "CONTROL" %in% metadata$condition) {
   treated <- metadata$sample[metadata$condition == "NT"]
   control <- metadata$sample[metadata$condition == "UNTREATED"]
   contrast <- c("NT", "UNTREATED")
-} else if ("NT" %in% metadata$condition & "UNTREATED" %in% metadata$condition) {
-  treatment <- ifelse(metadata$condition == "NT", 1, 0)
-  treated <- metadata$sample[metadata$condition == "NT"]
-  control <- metadata$sample[metadata$condition == "UNTREATED"]
-  contrast <- c("NT", "UNTREATED")
+} else if ("NT" %in% metadata$condition & "STOP" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "STOP", 1, 0)
+  treated <- metadata$sample[metadata$condition == "STOP"]
+  control <- metadata$sample[metadata$condition == "NT"]
+  contrast <- c("STOP", "NT")
 } else {
   stop("Unknown contrast specified in samplesheet condition column")
 }
