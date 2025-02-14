@@ -1151,50 +1151,6 @@ dmr_table <- cbind(
 round_cols <- c(sample_cols, "avg_treat", "avg_ctrl", "pvalue", "qvalue", "meth.diff")
 bp_cols <- c("start", "end")
 
-datatable(
-  dmr_table,
-  rownames = FALSE,
-  extensions = "Buttons",
-  options = list(
-    dom = "Bfrtip",
-    buttons = list(
-      list(
-        extend = "copy"
-      ),
-      list(
-        extend = "csv",
-        filename = paste(params$study, "dmr", sep="_")
-      ),
-      list(
-        extend = "excel",
-        filename = paste(params$study, "dmr", sep="_")
-      ),
-      list(
-        extend = "pdf",
-        filename = paste(params$study, "dmr", sep="_")
-      ),
-      list(
-        extend = "print"
-      )
-    )
-  ),
-  caption= htmltools::tags$caption(
-    style = 'caption-side: bottom;',  
-    paste("avg_treat = Average DMR % methylation across", contrast[1], "samples"), htmltools::tags$br(),
-    paste("avg_ctrl = Average DMR % methylation across", contrast[2], "samples"), htmltools::tags$br(),
-    paste("meth.diff =", contrast[1], "DMR % methylation -", contrast[2], "DMR % methylation") 
-  )
-) %>%
-formatSignif(
-  columns = round_cols,
-  digits = 4
-) %>%
-formatRound(
-  columns = bp_cols,
-  digits = 0,
-  interval = NULL
-)
-
 ```
 
 ## Volcano plot
@@ -1381,7 +1337,7 @@ ggplot(nearest_genes_df, aes(x=distance)) +
 
 DMRs annotated with nearest gene information.
 
-```{r nearest_gene_table, eval=run_dmr_annotation}
+```{r nearest_gene_table, eval=FALSE}
 # Display in table
 round_cols <- c("qvalue", "meth.diff")
 int_cols <- c("start", "end", "distance")
@@ -1491,7 +1447,7 @@ if (count_dmr_overlap > 0) {
 }
 ```
 
-```{r chromhmm_table, eval=run_dmr_annotation}
+```{r chromhmm_table, eval=FALSE}
 if (count_dmr_overlap > 0) {
   # Display in table
   round_cols <- c("qvalue", "meth.diff")
@@ -1605,7 +1561,7 @@ if (count_dmr_overlap > 0) {
 }
 ```
 
-```{r ccre_table, eval=run_dmr_annotation}
+```{r ccre_table, eval=FALSE}
 if (count_dmr_overlap > 0) {
   # Display in table
   round_cols <- c("qvalue", "meth.diff")
@@ -1690,7 +1646,7 @@ cat("Note: a single DMR may have multiple blacklist annotations.")
 
 ```
 
-```{r blacklist_table, eval=run_dmr_annotation}
+```{r blacklist_table, eval=FALSE}
 if (count_dmr_overlap > 0) {
   # Display in table
   round_cols <- c("qvalue", "meth.diff")
