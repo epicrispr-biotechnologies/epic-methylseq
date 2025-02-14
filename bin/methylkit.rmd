@@ -176,6 +176,11 @@ if ("EPI321" %in% metadata$condition & "CONTROL" %in% metadata$condition) {
   treated <- metadata$sample[metadata$condition == "STOP"]
   control <- metadata$sample[metadata$condition == "NT"]
   contrast <- c("STOP", "NT")
+} else if ("Myo_D7" %in% metadata$condition & "Testes" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "Myo_D7", 1, 0)
+  treated <- metadata$sample[metadata$condition == "Myo_D7"]
+  control <- metadata$sample[metadata$condition == "Testes"]
+  contrast <- c("Myo_D7", "Testes")
 } else {
   stop("Unknown contrast specified in samplesheet condition column")
 }
@@ -1045,13 +1050,13 @@ write.table(
   quote=FALSE
 )
 # This is the final DMR file we want!!!!
-perc.meth.tile.sig <- perc.meth.tile[perc.meth.tile$qvalue < 0.01 & abs(perc.meth.tile$meth.diff) > 10,]
+perc.meth.tile.sig <- perc.meth.tile[perc.meth.tile$qvalue < 0.05 & abs(perc.meth.tile$meth.diff) > 5,]
 total_sig_dmrs <- nrow(perc.meth.tile.sig)
 run_dmr_annotation <- total_sig_dmrs > 0
 
 write.table(
   perc.meth.tile.sig,
-  file = paste0(params$out_path, "/", params$study,"_dmr_q0.01_methdiff_10.tsv"),
+  file = paste0(params$out_path, "/", params$study,"_dmr_q0.05_methdiff_5.tsv"),
   sep="\t",
   col.names=TRUE,
   row.names=FALSE,
@@ -1130,7 +1135,7 @@ Note: if we have replicates, the function will automatically use logistic regres
 Treatment : `r contrast[1]`  
 Control : `r contrast[2]`
 
-**`r total_sig_dmrs`** DMRs were identified with q-value < 0.01 and % methylation difference > 10.
+**`r total_sig_dmrs`** DMRs were identified with q-value < 0.05 and % methylation difference > 5.
 
 ```{r dmr_table, eval=run_dmr_annotation}
 # Display in table
@@ -1199,9 +1204,9 @@ formatRound(
 
 # Label significance groups
 perc.meth.tile$sig.group <- "NS"
-perc.meth.tile$sig.group[perc.meth.tile$qvalue < 0.01 & abs(perc.meth.tile$meth.diff) <= 10] <- "qvalue"
-perc.meth.tile$sig.group[perc.meth.tile$qvalue >= 0.01 & abs(perc.meth.tile$meth.diff) > 10] <- "meth.diff"
-perc.meth.tile$sig.group[perc.meth.tile$qvalue < 0.01 & abs(perc.meth.tile$meth.diff) > 10] <- "qvalue and meth.diff"
+perc.meth.tile$sig.group[perc.meth.tile$qvalue < 0.05 & abs(perc.meth.tile$meth.diff) <= 5] <- "qvalue"
+perc.meth.tile$sig.group[perc.meth.tile$qvalue >= 0.05 & abs(perc.meth.tile$meth.diff) > 5] <- "meth.diff"
+perc.meth.tile$sig.group[perc.meth.tile$qvalue < 0.05 & abs(perc.meth.tile$meth.diff) > 5] <- "qvalue and meth.diff"
 
 
 # Borrowing EnhancedVolcano theme
@@ -1274,13 +1279,13 @@ ggplot(
     size = 2
   ) +
   geom_vline(
-    xintercept = c(-10, 10),
+    xintercept = c(-5, 5),
     col = "black",
     linewidth = 0.4,
     linetype = "longdash"
   ) +
   geom_hline(
-    yintercept = -log10(0.01),
+    yintercept = -log10(0.05),
     col = "black",
     linewidth = 0.4,
     linetype = "longdash"
@@ -1305,7 +1310,7 @@ ggplot(
     x = "% methylation change",
     y = "-log10(qvalue)",
     title = paste(contrast[1], "vs", contrast[2], "total DMRs"),
-    subtitle = "Thresholds: qvalue=0.01, meth.diff=10"
+    subtitle = "Thresholds: qvalue=0.05, meth.diff=5"
   ) +
   guides(
     color = guide_legend(
