@@ -192,6 +192,16 @@ if ("EPI321" %in% metadata$condition & "CONTROL" %in% metadata$condition) {
   treated <- metadata$sample[metadata$condition == "TKTL1_target"]
   control <- metadata$sample[metadata$condition == "Non_target"]
   contrast <- c("TKTL1_target", "Non_target")
+} else if ("BRDT_target" %in% metadata$condition & "Non_target" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "BRDT_target", 1, 0)
+  treated <- metadata$sample[metadata$condition == "BRDT_target"]
+  control <- metadata$sample[metadata$condition == "Non_target"]
+  contrast <- c("BRDT_target", "Non_target")
+} else if ("HSPA1A_target" %in% metadata$condition & "Non_target" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "HSPA1A_target", 1, 0)
+  treated <- metadata$sample[metadata$condition == "HSPA1A_target"]
+  control <- metadata$sample[metadata$condition == "Non_target"]
+  contrast <- c("HSPA1A_target", "Non_target")
 } else {
   stop("Unknown contrast specified in samplesheet condition column")
 }
