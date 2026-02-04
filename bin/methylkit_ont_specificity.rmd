@@ -187,6 +187,11 @@ if ("EPI321" %in% metadata$condition & "CONTROL" %in% metadata$condition) {
   treated <- metadata$sample[metadata$condition == "CRISPRon"]
   control <- metadata$sample[metadata$condition == "KAL_silenced"]
   contrast <- c("CRISPRon", "KAL_silenced")
+} else if ("TKTL1_target" %in% metadata$condition & "Non_target" %in% metadata$condition) {
+  treatment <- ifelse(metadata$condition == "TKTL1_target", 1, 0)
+  treated <- metadata$sample[metadata$condition == "TKTL1_target"]
+  control <- metadata$sample[metadata$condition == "Non_target"]
+  contrast <- c("TKTL1_target", "Non_target")
 } else {
   stop("Unknown contrast specified in samplesheet condition column")
 }
@@ -249,7 +254,7 @@ datatable(
   ),
   caption= htmltools::tags$caption(
     style = 'caption-side: bottom;',  
-    "10X CpG = Number of CpGs in CD81 and off-target regions with at least 10X coverage."
+    "10X CpG = Number of CpGs in on and off-target regions with at least 10X coverage."
   )
 ) %>% formatRound(
   columns = "sample_cpg_cnts",
@@ -261,7 +266,7 @@ datatable(
 CpGs must meet coverage requirements in all samples to be included in analysis.
 
 ```{r coverage_stats, results="asis"}
-cat("CD81 and off-target region CpGs with at least 10X coverage in all samples:") 
+cat("On and off-target region CpGs with at least 10X coverage in all samples:") 
 cat(format(nrow(meth), big.mark = ","))
 
 ```
