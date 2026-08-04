@@ -82,6 +82,7 @@ cores <- 5
 ```{r read_metadata}
 # Load metadata
 metadata <- read_csv(params$metadata_path)
+cov_files <- metadata$file
 metadata <- metadata[c("sample", "condition")]
 metadata <- as.data.frame(metadata)
 rownames(metadata) <- metadata$sample
@@ -105,11 +106,11 @@ rownames(metadata) <- metadata$sample
 # )
 # Ensure files are ordered according to metadata sample sheet
 # cov_files <- as.list(sapply(metadata$sample, find_files_with_prefix, files = unordered_files))
-cov_files <- list.files(
-  params$bismark_path,
-  pattern = ".tsv",
-  full.names = TRUE
-)
+# cov_files <- list.files(
+#   params$bismark_path,
+#   pattern = ".tsv",
+#   full.names = TRUE
+# )
 
 # Create variables for treated and control samples
 if ("EPI321" %in% metadata$condition & "CONTROL" %in% metadata$condition) {
