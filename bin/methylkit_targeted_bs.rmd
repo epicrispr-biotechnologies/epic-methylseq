@@ -992,19 +992,22 @@ formatRound(
 # Function to convert scores to RGB colors using viridis palette
 # @param scores Numeric vector of scores to convert to RGB colors.
 # @return A matrix of RGB values corresponding to the input scores.
-scores_to_rgb <- function(scores) {
+scores_to_rgb <- function(scores, set_limit) {
   scores <- as.numeric(scores)
   finite <- is.finite(scores)
 
   # Equivalent to matplotlib.colors.Normalize()
   limits <- range(scores[finite])
+  if (max(abs(limits)) > set_limit) {
+    stop("% methylation difference > 40 for BED color limits. Adjust limits")
+  }
   normalized <- rep(NA_real_, length(scores))
 
   if (diff(limits) == 0) {
     normalized[finite] <- 0
   } else {
     normalized[finite] <-
-      (scores[finite] - limits[1]) / diff(limits)
+      (scores[finite] - (-set_limit) ) / (set_limit * 2)
   }
   # Interpolate through viridis and convert hex colors to 0–255 RGB
   # palette <- rev(viridisLite::viridis(256))
@@ -1018,7 +1021,8 @@ scores_to_rgb <- function(scores) {
 
 # Write output to bedfiles
 # Make RGB vector for DMCs based on methylation difference
-methdiff_rgb <- scores_to_rgb(perc.meth.cpg$meth.diff)
+set_limit <- 40
+methdiff_rgb <- scores_to_rgb(perc.meth.cpg$meth.diff, set_limit)
 # Make color key png
 png(paste0(params$out_path, "/", "meth_diff_color_key.png"), width = 1200, height=400, res = 150)
   limits <- range(perc.meth.cpg$meth.diff, na.rm = TRUE)
@@ -1026,7 +1030,7 @@ png(paste0(params$out_path, "/", "meth_diff_color_key.png"), width = 1200, heigh
   # palette <- colorspace::diverging_hcl(256, palette = "Blue-Red")
   palette <- colorRampPalette(c("#FF2020", "#BDBDBD", "#0066FF"))(256)
   graphics::image(
-    x = seq(limits[1], limits[2], length.out = 256),
+    x = seq(-set_limit, set_limit, length.out = 256),
     y = 1,
     z = matrix(seq_len(256), ncol = 1),
     col = palette,
