@@ -917,7 +917,7 @@ ggplot(perc.meth.cpg) +
 ```
 
 ## DMC table
-Differentially methylated CpGs are calcualted using methylKit.
+Differentially methylated CpGs are calculated using methylKit.
 Depending on the sample size per each set it will either use Fisher’s exact or logistic regression to calculate P-values.
 P-values will be adjusted to Q-values using SLIM method (Wang, Tuominen, and Tsai 2011).
 Note: if we have replicates, the function will automatically use logistic regression.
@@ -1007,7 +1007,9 @@ scores_to_rgb <- function(scores) {
       (scores[finite] - limits[1]) / diff(limits)
   }
   # Interpolate through viridis and convert hex colors to 0–255 RGB
-  palette <- rev(viridisLite::viridis(256))
+  # palette <- rev(viridisLite::viridis(256))
+  # palette <- colorspace::diverging_hcl(256, palette = "Blue-Red")
+  palette <- colorRampPalette(c("#FF2020", "#BDBDBD", "#0066FF"))(256)
   mapper <- grDevices::colorRamp(palette, space = "Lab")
   rgb <- round(mapper(normalized))
   rgb = paste(rgb[,1], rgb[,2], rgb[,3], sep=",")
@@ -1020,7 +1022,9 @@ methdiff_rgb <- scores_to_rgb(perc.meth.cpg$meth.diff)
 # Make color key png
 png(paste0(params$out_path, "/", "meth_diff_color_key.png"), width = 1200, height=400, res = 150)
   limits <- range(perc.meth.cpg$meth.diff, na.rm = TRUE)
-  palette <- rev(viridisLite::viridis(256))
+  # palette <- rev(viridisLite::viridis(256))
+  # palette <- colorspace::diverging_hcl(256, palette = "Blue-Red")
+  palette <- colorRampPalette(c("#FF2020", "#BDBDBD", "#0066FF"))(256)
   graphics::image(
     x = seq(limits[1], limits[2], length.out = 256),
     y = 1,
@@ -1042,9 +1046,9 @@ sig_methdiff_5_rgb <- ifelse(sig_methdiff_5, "255,0,0", "192,192,192")
 # Adjust start coordinate for BED format
 bed_start <- perc.meth.cpg$start - 1
 # Make BED tables
-sig_methdiff_10_bed <- cbind(perc.meth.cpg$chr, bed_start, perc.meth.cpg$end, ".", ".", ".", bed_start, bed_start, sig_methdiff_10_rgb)
-sig_methdiff_5_bed <- cbind(perc.meth.cpg$chr, bed_start, perc.meth.cpg$end, ".", ".", ".", bed_start, bed_start, sig_methdiff_5_rgb)
-meth_diff_rgb_bed <- cbind(perc.meth.cpg$chr, bed_start, perc.meth.cpg$end, ".", ".", ".", bed_start, bed_start, methdiff_rgb)
+sig_methdiff_10_bed <- cbind(perc.meth.cpg$chr, bed_start, perc.meth.cpg$end, ".", ".", ".", bed_start, perc.meth.cpg$end, sig_methdiff_10_rgb)
+sig_methdiff_5_bed <- cbind(perc.meth.cpg$chr, bed_start, perc.meth.cpg$end, ".", ".", ".", bed_start, perc.meth.cpg$end, sig_methdiff_5_rgb)
+meth_diff_rgb_bed <- cbind(perc.meth.cpg$chr, bed_start, perc.meth.cpg$end, ".", ".", ".", bed_start, perc.meth.cpg$end, methdiff_rgb)
 # Write BED files
 write.table(
   sig_methdiff_10_bed,
