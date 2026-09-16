@@ -972,8 +972,8 @@ datatable(
     style = 'caption-side: bottom;',  
     paste("avg_treat = Average DMC % methylation across", contrast[1], "samples"), htmltools::tags$br(),
     paste("avg_ctrl = Average DMC % methylation across", contrast[2], "samples"), htmltools::tags$br(),
-    paste("meth.diff =", contrast[1], "DMC % methylation -", contrast[2], "DMC % methylation"), htmltools::tags$br(),
-    paste("Chromosome coordinates are in BED format: O-based inclusive start, exclusive end")
+    paste("meth.diff =", contrast[1], "DMC % methylation -", contrast[2], "DMC % methylation"), htmltools::tags$br()
+    #paste("Chromosome coordinates are in BED format: O-based inclusive start, exclusive end")
   )
 ) %>%
 formatSignif(
@@ -986,6 +986,90 @@ formatRound(
   interval = NULL
 )
 
+```
+
+```{r write_beds}
+# Function to convert scores to RGB colors using viridis palette
+# @param scores Numeric vector of scores to convert to RGB colors.
+# @return A matrix of RGB values corresponding to the input scores.
+scores_to_rgb <- function(scores) {
+  scores <- as.numeric(scores)
+  finite <- is.finite(scores)
+
+  # Equivalent to matplotlib.colors.Normalize()
+  limits <- range(scores[finite])
+  normalized <- rep(NA_real_, length(scores))
+
+  if (diff(limits) == 0) {
+    normalized[finite] <- 0
+  } else {
+    normalized[finite] <-
+      (scores[finite] - limits[1]) / diff(limits)
+  }
+  # Interpolate through viridis and convert hex colors to 0–255 RGB
+  palette <- rev(viridisLite::viridis(256))
+  mapper <- grDevices::colorRamp(palette, space = "Lab")
+  rgb <- round(mapper(normalized))
+  rgb = paste(rgb[,1], rgb[,2], rgb[,3], sep=",")
+  return(rgb)
+}
+
+# Write output to bedfiles
+# Make RGB vector for DMCs based on methylation difference
+methdiff_rgb <- scores_to_rgb(perc.meth.cpg$meth.diff)
+# Make color key png
+png(paste0(params$out_path, "/", "meth_diff_color_key.png"), width = 1200, height=400, res = 150)
+  limits <- range(perc.meth.cpg$meth.diff, na.rm = TRUE)
+  palette <- rev(viridisLite::viridis(256))
+  graphics::image(
+    x = seq(limits[1], limits[2], length.out = 256),
+    y = 1,
+    z = matrix(seq_len(256), ncol = 1),
+    col = palette,
+    axes = FALSE,
+    xlab = "% methylation difference",
+    ylab = ""
+  )
+  graphics::axis(1)
+  graphics::box()
+dev.off()
+# Make booleans for significant DMCs
+sig_methdiff_10 <- perc.meth.cpg$qvalue < 0.05 & abs(perc.meth.cpg$meth.diff) > 10
+sig_methdiff_5 <- perc.meth.cpg$qvalue < 0.05 & abs(perc.meth.cpg$meth.diff) > 5
+# Create RGB vector for significant DMCs
+sig_methdiff_10_rgb <- ifelse(sig_methdiff_10, "255,0,0", "192,192,192")
+sig_methdiff_5_rgb <- ifelse(sig_methdiff_5, "255,0,0", "192,192,192")
+# Adjust start coordinate for BED format
+bed_start <- perc.meth.cpg$start - 1
+# Make BED tables
+sig_methdiff_10_bed <- cbind(perc.meth.cpg$chr, bed_start, perc.meth.cpg$end, ".", ".", ".", bed_start, bed_start, sig_methdiff_10_rgb)
+sig_methdiff_5_bed <- cbind(perc.meth.cpg$chr, bed_start, perc.meth.cpg$end, ".", ".", ".", bed_start, bed_start, sig_methdiff_5_rgb)
+meth_diff_rgb_bed <- cbind(perc.meth.cpg$chr, bed_start, perc.meth.cpg$end, ".", ".", ".", bed_start, bed_start, methdiff_rgb)
+# Write BED files
+write.table(
+  sig_methdiff_10_bed,
+  file = paste0(params$out_path, "/", params$study,"_dmc_qval_0.05_methdiff_10.bed"),
+  sep="\t",
+  col.names=FALSE,
+  row.names=FALSE,
+  quote=FALSE
+)
+write.table(
+  sig_methdiff_5_bed,
+  file = paste0(params$out_path, "/", params$study,"_dmc_qval_0.05_methdiff_5.bed"),
+  sep="\t",
+  col.names=FALSE,
+  row.names=FALSE,
+  quote=FALSE
+)
+write.table(
+  meth_diff_rgb_bed,
+  file = paste0(params$out_path, "/", params$study,"_dmc_meth_diff_color.bed"),
+  sep="\t",
+  col.names=FALSE,
+  row.names=FALSE,
+  quote=FALSE
+)
 ```
 
 ## Volcano plot
